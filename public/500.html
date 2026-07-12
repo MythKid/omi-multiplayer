@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OMI · Something went wrong</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: Georgia, 'Times New Roman', serif;
+    background: radial-gradient(ellipse at center, #1e5a35 0%, #123822 55%, #0a1f12 100%);
+    color: #f0e8cc;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    text-align: center; padding: 24px; gap: 14px;
+  }
+  .suit { font-size: clamp(52px, 16vmin, 96px); color: #ff8f8f; text-shadow: 0 4px 22px rgba(0,0,0,.6); }
+  .code { font-size: clamp(30px, 8vmin, 48px); letter-spacing: 6px; color: #ff8f8f; font-weight: 700; }
+  p { color: #cdbf9b; max-width: 420px; line-height: 1.5; }
+  a {
+    margin-top: 8px; display: inline-block;
+    font-weight: 700; letter-spacing: 2px; text-decoration: none;
+    color: #1a1a2e; background: linear-gradient(180deg, #e8c547, #c9a227);
+    border-radius: 8px; padding: 12px 32px; box-shadow: 0 4px 14px rgba(0,0,0,.45);
+  }
+</style>
+</head>
+<body>
+  <div class="suit">&#9829;</div>
+  <div class="code">500</div>
+  <p>The dealer fumbled the deck. Something went wrong on our end. Please try again in a moment.</p>
+  <a href="/">Back to the table</a>
+</body>
+</html>

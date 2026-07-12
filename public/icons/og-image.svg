@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" role="img" aria-label="OMI, the Sri Lankan card game">
+  <defs>
+    <radialGradient id="ogbg" cx="38%" cy="42%" r="85%">
+      <stop offset="0%" stop-color="#1e5a35"/>
+      <stop offset="55%" stop-color="#123822"/>
+      <stop offset="100%" stop-color="#0a1f12"/>
+    </radialGradient>
+    <radialGradient id="ogtile" cx="50%" cy="42%" r="78%">
+      <stop offset="0%" stop-color="#1e5a35"/>
+      <stop offset="55%" stop-color="#123822"/>
+      <stop offset="100%" stop-color="#0a1f12"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#ogbg)"/>
+  <g font-family="Georgia, 'Times New Roman', serif" text-anchor="middle" opacity="0.05" fill="#e8c547">
+    <text x="1070" y="600" font-size="300">&#9827;</text>
+    <text x="1120" y="180" font-size="200">&#9830;</text>
+  </g>
+  <rect x="30" y="30" width="1140" height="570" rx="28" fill="none" stroke="#c9a227" stroke-width="3" opacity="0.4"/>
+
+  <!-- Icon tile -->
+  <rect x="110" y="165" width="300" height="300" rx="56" fill="url(#ogtile)"/>
+  <rect x="122" y="177" width="276" height="276" rx="44" fill="none" stroke="#c9a227" stroke-width="3" opacity="0.5"/>
+  <g font-family="Georgia, 'Times New Roman', serif" text-anchor="middle">
+    <text x="200" y="300" font-size="96" fill="#f0e8cc">&#9824;</text>
+    <text x="320" y="300" font-size="96" fill="#d84a3d">&#9829;</text>
+    <text x="200" y="405" font-size="96" fill="#d84a3d">&#9830;</text>
+    <text x="320" y="405" font-size="96" fill="#f0e8cc">&#9827;</text>
+  </g>
+
+  <!-- Wordmark and tagline -->
+  <g font-family="Georgia, 'Times New Roman', serif">
+    <text x="480" y="292" font-size="158" font-weight="700" letter-spacing="14" fill="#e8c547">OMI</text>
+    <text x="486" y="362" font-size="46" font-style="italic" fill="#cbb992">The Sri Lankan Card Game</text>
+    <line x1="486" y1="392" x2="1090" y2="392" stroke="#c9a227" stroke-width="2" opacity="0.3"/>
+    <text x="486" y="440" font-size="30" fill="#9a8770">Multiplayer trick-taking you play in the browser.</text>
+    <text x="486" y="500" font-size="28" fill="#e8c547">nodenull.org</text>
+  </g>
+</svg>

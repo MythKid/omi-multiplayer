@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="OMI">
+  <defs>
+    <radialGradient id="bgm" cx="50%" cy="45%" r="80%">
+      <stop offset="0%" stop-color="#1e5a35"/>
+      <stop offset="55%" stop-color="#123822"/>
+      <stop offset="100%" stop-color="#0a1f12"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bgm)"/>
+  <g font-family="Georgia, 'Times New Roman', serif" text-anchor="middle">
+    <text x="206" y="228" font-size="100" fill="#f0e8cc">&#9824;</text>
+    <text x="306" y="228" font-size="100" fill="#d84a3d">&#9829;</text>
+    <text x="206" y="330" font-size="100" fill="#d84a3d">&#9830;</text>
+    <text x="306" y="330" font-size="100" fill="#f0e8cc">&#9827;</text>
+    <text x="256" y="420" font-weight="700" font-size="92" letter-spacing="6" fill="#e8c547">OMI</text>
+  </g>
+</svg>

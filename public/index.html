@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#123822">
+<meta name="description" content="Multiplayer Omi, the Sri Lankan trick-taking card game. Play on your Wi-Fi or online.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="OMI · Sri Lankan Card Game">
+<meta property="og:description" content="Multiplayer Omi, the Sri Lankan trick-taking card game. Play on your Wi-Fi or online.">
+<meta property="og:image" content="/icons/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="OMI · Sri Lankan Card Game">
+<meta name="twitter:description" content="Multiplayer Omi, the Sri Lankan trick-taking card game.">
+<meta name="twitter:image" content="/icons/og-image.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="OMI">
+<title>OMI · Sri Lankan Card Game</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/favicon.ico" sizes="32x32">
+<link rel="icon" type="image/svg+xml" href="/icons/favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16.png">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<link id="font-css" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet" media="print">
+<link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+
+  <!-- SCREEN 1: JOIN -->
+  <div id="screen-join">
+    <div class="logo">OMI</div>
+    <div class="logo-sub">The Sri Lankan Card Game</div>
+    <div class="deco"></div>
+    <div class="lbl">YOUR NAME</div>
+    <input id="input-name" type="text" maxlength="14" placeholder="Enter your name…" value="Player">
+    <button id="btn-join">JOIN GAME</button>
+    <button id="btn-leaderboard" class="btn-secondary">🏆 LEADERBOARD</button>
+    <div id="join-error" class="error-msg"></div>
+  </div>
+
+  <!-- SCREEN 2: LOBBY -->
+  <div id="screen-lobby" style="display:none">
+    <div class="logo">OMI</div>
+    <div class="deco"></div>
+    <div class="lbl">WAITING ROOM</div>
+    <div id="lobby-players"></div>
+    <div id="lobby-teams" style="display:none">
+      <div class="lbl" style="margin-bottom:8px">TEAMS</div>
+      <div id="team-rows"></div>
+      <button id="btn-swap-teams" style="display:none">CHANGE PARTNERS</button>
+    </div>
+    <div id="lobby-mode-section" style="display:none">
+      <div class="lbl" style="margin-bottom:10px">SELECT MODE</div>
+      <div class="mode-btns">
+        <button class="mbtn" data-mode="2">2 Players<small>Duel</small></button>
+        <button class="mbtn" data-mode="3">3 Players<small>Free-for-All</small></button>
+        <button class="mbtn on" data-mode="4">4 Players<small>Team Mode</small></button>
+      </div>
+      <button id="btn-start" style="margin-top:16px">START GAME</button>
+      <div id="start-hint" class="ap-hint"></div>
+    </div>
+    <div id="lobby-wait-msg" style="display:none">
+      <p>Waiting for host to start the game…</p>
+    </div>
+    <div id="lobby-ip-hint" style="display:none"></div>
+  </div>
+
+  <!-- SCREEN 3: GAME -->
+  <div id="screen-game" style="display:none">
+    <div id="table">
+      <div id="pS"  class="pzone"></div>
+      <div id="pN"  class="pzone"></div>
+      <div id="pW"  class="pzone"></div>
+      <div id="pE"  class="pzone"></div>
+      <div id="pNW" class="pzone"></div>
+      <div id="pNE" class="pzone"></div>
+
+      <div id="trickarea"></div>
+
+      <div id="stage" style="display:none">
+        <div id="stage-hint"></div>
+        <div id="stage-area"></div>
+      </div>
+
+      <div id="drawpile" style="display:none">
+        <div class="dp-lbl">DRAW PILE</div>
+        <div id="dp-stack"></div>
+        <div id="dp-count"></div>
+      </div>
+
+      <div id="infobar">
+        <div id="trump-disp" class="trump-disp">-</div>
+        <div class="ib-row"><span class="ib-l">TRUMP</span><span class="ib-v" id="trump-name">-</span></div>
+        <div class="ib-row"><span class="ib-l">ROUND</span><span class="ib-v" id="round-num">1</span></div>
+        <div class="ib-row"><span class="ib-l">TRICKS</span><span class="ib-v" id="tricks-info">0/0</span></div>
+        <div id="kapothi-banner" style="display:none">KAPOTHI ANNOUNCED</div>
+      </div>
+
+      <div id="scores">
+        <div class="sc-h">SCORES</div>
+        <div id="score-list"></div>
+        <button id="btn-vote-end" style="display:none">END MATCH EARLY</button>
+      </div>
+
+      <div id="vote-banner" style="display:none"></div>
+
+      <div id="splash"></div>
+
+      <div id="action-panel" style="display:none"></div>
+      <div id="toast" style="display:none" role="status" aria-live="polite"></div>
+    </div>
+  </div>
+
+  <!-- OVERLAY: Round Over / Game Over -->
+  <div id="overlay" style="display:none">
+    <div class="ov-box">
+      <div id="ov-title" class="ov-title">Round Over</div>
+      <table class="ov-table">
+        <thead><tr><th>PLAYER</th><th>TRICKS</th><th>+/-</th><th>TOTAL</th></tr></thead>
+        <tbody id="ov-tbody"></tbody>
+      </table>
+      <div id="ov-note" class="ov-note"></div>
+      <button id="btn-ready" class="ov-btn-pri">READY FOR NEXT ROUND</button>
+      <div id="ov-waiting" class="ov-wait"></div>
+    </div>
+  </div>
+
+  <!-- Info button + How-to-play overlay -->
+  <button id="btn-info" title="How to play" aria-label="How to play">?</button>
+
+  <div id="info-overlay" style="display:none" role="dialog" aria-modal="true" aria-label="How to play OMI">
+    <div class="ov-box info-box">
+      <button id="info-close" aria-label="Close">×</button>
+      <div class="ov-title">HOW TO PLAY OMI</div>
+
+      <div class="info-h">WHAT IS THIS GAME?</div>
+      <p>Omi is Sri Lanka's favourite card game. Four players make two teams,
+      and you partner with the player sitting across the table. Before the
+      game starts, the host can change who partners with whom in the lobby.
+      The game uses 32 cards: only Ace, King, Queen, Jack, 10, 9, 8 and 7 of
+      each suit. Cards rank from Ace (best) down to 7 (worst).</p>
+
+      <div class="info-h">THE DECK IS REAL</div>
+      <p>There is one deck and it never gets magically reset. Cards collected
+      from tricks stack up in order, and next round somebody shuffles that same
+      pile, just like at a real table. If the shuffle is lazy, cards stay
+      clumped together, so mix it well.</p>
+
+      <div class="info-h">HOW A ROUND GOES</div>
+      <ul>
+        <li><b>Wash:</b> the dealer smooshes the cards around by dragging them.</li>
+        <li><b>Shuffle:</b> chop packets off the deck (click it) or riffle it, as many times as you like.</li>
+        <li><b>Cut:</b> the player to the dealer's left slices the stack and restacks it.</li>
+        <li><b>First 4 cards:</b> everyone gets 4 cards, starting with the player to the dealer's right.</li>
+        <li><b>Call trump:</b> that same player looks at their 4 cards and picks the trump suit.</li>
+        <li><b>Last 4 cards:</b> everyone gets 4 more. Now you hold 8.</li>
+        <li><b>Play 8 tricks:</b> the trump caller leads the first trick. Play goes counter-clockwise.</li>
+      </ul>
+
+      <div class="info-h">PLAYING A TRICK</div>
+      <p>Each player throws one card. You <b>must follow the suit</b> of the
+      first card if you have that suit, and the game only lets you tap legal
+      cards. If you have none of that suit, throw anything, including a trump.
+      The highest trump wins the trick. If nobody played a trump, the highest
+      card of the suit that was led wins. The winner starts the next trick.</p>
+
+      <div class="info-h">SCORING (TOKENS)</div>
+      <ul>
+        <li>Trump caller's team wins 5, 6 or 7 tricks: they get <b>1 token</b>.</li>
+        <li>The other team wins 5 or more: they get <b>2 tokens</b> (breaking the call is worth more).</li>
+        <li>All 8 tricks with a Kapothi call: <b>3 tokens</b>.</li>
+        <li>A 4 to 4 tie: nobody scores, but one bonus token waits on the table for the next winners.</li>
+      </ul>
+      <p>First team to collect <b>10 tokens</b> wins the match.</p>
+
+      <div class="info-h">KAPOTHI</div>
+      <p>If your team wins the first 6 tricks, the game asks whether you want to
+      announce <b>Kapothi</b>. Announce it and sweep all 8 tricks for 3 tokens.
+      But if you announce and then lose even one of the last two tricks, the
+      other team grabs <b>4 tokens</b>. Sweep quietly without announcing and you
+      only get the normal 1 or 2. Brave or safe is your choice.</p>
+
+      <div class="info-h">STOPPING EARLY</div>
+      <p>Anyone can press <b>END MATCH EARLY</b> under the scores. If every
+      player agrees, the match stops and whoever has the most tokens wins.
+      One "no" and the game carries on.</p>
+
+      <div class="info-h">2 &amp; 3 PLAYER MODES</div>
+      <p><b>2 players:</b> 8 cards each plus a draw pile. The pile's top card
+      sets trump, and after each trick both players draw a fresh card. Best of
+      5 rounds. <b>3 players:</b> 30 cards, 10 tricks each round, every trick
+      you win is a point, first to 25.</p>
+
+      <div class="info-h">QUICK TIPS</div>
+      <ul>
+        <li>Count the trumps that have been played. 8 exist in total.</li>
+        <li>Lead your Aces early before someone runs out of that suit and trumps them.</li>
+        <li>If your partner is already winning the trick, don't waste a big card.</li>
+      </ul>
+
+      <div class="info-credit">
+        Notes created by <b>Methindu Damsara</b> |
+        <a href="https://nodenull.org" target="_blank" rel="noopener noreferrer">nodenull.org</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- OVERLAY: Leaderboard -->
+  <div id="leaderboard-overlay" style="display:none" role="dialog" aria-modal="true" aria-label="Leaderboard">
+    <div class="ov-box lb-box">
+      <button id="lb-close" aria-label="Close">×</button>
+      <div class="ov-title">🏆 LEADERBOARD</div>
+      <div class="lb-sub">Top teams by highest score</div>
+      <div id="lb-body"></div>
+      <div id="lb-empty" class="lb-empty" style="display:none">
+        No games recorded yet. Win a 4-player match to claim the top spot.
+      </div>
+    </div>
+  </div>
+
+  <!-- OVERLAY: Disconnection -->
+  <div id="dc-overlay" style="display:none">
+    <div class="ov-box">
+      <div class="ov-title">⚠ Player Disconnected</div>
+      <div id="dc-msg" class="ov-note"></div>
+      <button id="btn-back-lobby">BACK TO LOBBY</button>
+    </div>
+  </div>
+
+  <!-- Banner shown while waiting for a dropped player to reconnect -->
+  <div id="reconnect-banner" role="status" aria-live="polite" style="display:none"></div>
+
+  <script src="/socket.io.min.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>

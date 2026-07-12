@@ -1,0 +1,416 @@
+# OMI
+
+A multiplayer web version of **Omi**, the Sri Lankan trick-taking card game. Run it on
+your Wi-Fi and join by scanning a QR code, or deploy it to the internet and share a
+link. Everyone plays from a phone, tablet, or laptop browser. Empty seats are filled
+by bots, so you can also play on your own.
+
+Built by **Methindu Damsara** ([nodenull.org](https://nodenull.org)).
+
+## Contents
+
+- [What it is](#what-it-is)
+- [Features](#features)
+- [Technologies](#technologies)
+- [Screenshots](#screenshots)
+- [Quick start](#quick-start)
+- [Environment variables](#environment-variables)
+- [Deployment](#deployment)
+- [Hosting it on your network](#hosting-it-on-your-network)
+- [How to play](#how-to-play)
+- [Leaderboard](#leaderboard)
+- [Database](#database)
+- [Security model](#security-model)
+- [How the shuffle stays honest](#how-the-shuffle-stays-honest)
+- [Project layout](#project-layout)
+- [Testing](#testing)
+- [Roadmap](#roadmap)
+- [Troubleshooting](#troubleshooting)
+
+## What it is
+
+A Node.js + Express + Socket.IO server that holds the authoritative game state, and a
+browser client (plain HTML/CSS/JS, no framework, no build step). The server is split
+into focused modules; persistence for the leaderboard lives behind its own database
+layer so it can be swapped later without touching game code.
+
+## Features
+
+- **2, 3, and 4 player modes**, with bots filling any empty seats so you can play solo.
+- **A real physical deck** (4 player): you wash, shuffle, and cut the cards by hand, and
+  the same 32 cards carry over from round to round. The shuffle is modelled on real card
+  mixing rather than a perfect randomiser (see below).
+- **Team selection**: the host picks who partners with whom before the game starts.
+- **Persistent online leaderboard** for winning teams, stored in SQLite, sorted highest
+  first with the top three highlighted.
+- **Reconnect support**: refresh the page or drop off Wi-Fi and you reclaim your seat
+  within a grace window instead of ending the match for everyone.
+- **Installable (PWA)**: add it to a phone or desktop home screen; it loads offline.
+- **Join by QR code or invite link**, plus a scannable code in the terminal.
+- **Responsive and accessible**: adapts from phones to tablets to desktops, with keyboard
+  play, focus indicators, ARIA labels, and reduced-motion support.
+- **Deploys anywhere**: runs from source, sits behind a reverse proxy (Cloudflare,
+  Koyeb) over HTTPS, or packages to a single-file `omi.exe` for LAN play.
+
+## Technologies
+
+- **Runtime:** Node.js 18+, Express, Socket.IO.
+- **Security:** helmet, express-rate-limit, compression, a strict Content-Security-Policy.
+- **Storage:** SQLite via better-sqlite3, behind a database layer with a JSON fallback.
+- **Client:** vanilla HTML/CSS/JavaScript, a service worker, and a web app manifest.
+- **Tooling:** dotenv for configuration, pkg for the optional Windows executable.
+
+## Screenshots
+
+Add screenshots or a short GIF here to show the lobby, the physical-deck shuffle, a hand
+in play, and the leaderboard. Suggested captures:
+
+```
+docs/lobby.png        The lobby with the QR code, team panel, and invite link
+docs/shuffle.png      Washing / riffling the physical deck
+docs/play.png         A four-player hand mid-trick
+docs/leaderboard.png  The leaderboard with the top three highlighted
+```
+
+(Images are not committed to keep the repository light; drop them in a `docs/` folder
+and reference them here.)
+
+## Quick start
+
+Requires Node.js 18 or newer. Install and run:
+
+```bash
+npm install
+npm start
+```
+
+Then open the address it prints (see the next section). That is all: the browser
+client ships with the repo, so there is nothing else to copy or configure.
+
+If port 3000 is already taken, pick another one:
+
+```bash
+# macOS / Linux
+PORT=3001 npm start
+# Windows PowerShell
+$env:PORT=3001; npm start
+```
+
+Build a standalone Windows executable (no Node needed on the machine that runs it):
+
+```bash
+npm run build
+# or: npx pkg . --targets node18-win-x64 --output omi.exe
+```
+
+For local development with auto-restart on file changes:
+
+```bash
+npm run dev
+```
+
+## Environment variables
+
+Every tunable is read from the environment, so the same build runs on a laptop, a LAN
+host, or a public deployment with no code changes. Copy `.env.example` to `.env` for
+local use, or set these on your hosting platform. All are optional and have sensible
+defaults.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `PORT` | `3000` | Port to listen on. |
+| `NODE_ENV` | `development` | `production` quiets logs, trusts the proxy for host checks, and skips the LAN QR banner. |
+| `ALLOWED_HOSTS` | (empty) | Comma-separated hostnames to answer to. Empty on a LAN (private addresses are allowed automatically); set it in production to lock the server to your domain. |
+| `PUBLIC_URL` | (empty) | Public base URL to advertise in join links / QR when deployed behind a proxy. |
+| `TRUST_PROXY` | `1` | Proxy hops to trust for the real client IP and protocol. |
+| `MAX_SOCKETS` | `16` | Maximum simultaneous connections. |
+| `DB_DRIVER` | `auto` | `auto` uses SQLite when available, otherwise a JSON file. Force with `sqlite` or `json`. |
+| `DATA_DIR` | `./data` | Where the leaderboard is stored. Point at a persistent volume in production. |
+| `LEADERBOARD_SIZE` | `100` | Rows to keep and return. |
+| `LOG_LEVEL` | `info` (prod) / `debug` | `error`, `warn`, `info`, or `debug`. |
+
+## Deployment
+
+The server is ready to run behind a reverse proxy such as Cloudflare or a platform like
+Koyeb, over HTTPS. It calls `app.set('trust proxy', ...)`, so it reads the real client
+IP and protocol from the proxy, and it makes no `localhost`-only assumptions.
+
+A typical production configuration:
+
+```bash
+NODE_ENV=production
+PORT=8080                      # or whatever the platform assigns
+ALLOWED_HOSTS=omi.example.com  # your domain(s)
+PUBLIC_URL=https://omi.example.com
+DATA_DIR=/data                 # a persistent volume, so scores survive redeploys
+```
+
+Notes:
+
+- Set `ALLOWED_HOSTS` to your domain in production. With it set, the server answers only
+  for those hostnames; left empty in production it trusts the proxy and answers any host.
+- Attach a **persistent volume** and point `DATA_DIR` at it. On an ephemeral filesystem
+  the SQLite file is wiped on redeploy, and the leaderboard would reset.
+- WebSockets must be allowed through the proxy (Cloudflare and Koyeb both proxy them by
+  default). The client connects over `wss:` automatically on HTTPS.
+- The `omi.exe` build is for LAN play only; deploy with Node, not the executable.
+
+## Hosting it on your network
+
+This is the part I cared about most, since the point is that other people join over
+the LAN without any setup.
+
+**Finding the right address.** A lot of dev machines have several network interfaces
+(Wi-Fi, Ethernet, plus virtual adapters from VirtualBox, VMware, Hyper-V, WSL, Docker,
+and VPN clients). The naive "first non-internal IPv4" trick often picks one of those
+virtual adapters, and then the address shown to players is one nobody can actually
+reach. To avoid that, the server figures out its address two ways and prefers the more
+reliable one:
+
+1. It opens a UDP socket and "connects" it toward a public address. UDP connect sends
+   no packets, it just runs the OS routing table, so the local address that comes back
+   is the interface holding the default route. That is the one other devices on the
+   Wi-Fi actually talk to. This works even with no internet connection.
+2. As a fallback it enumerates every interface and scores them, preferring real
+   Wi-Fi and Ethernet adapters and common home ranges (192.168.x, 10.x) while pushing
+   virtual adapters, link-local (169.254.x), and the VirtualBox host-only range to the
+   bottom.
+
+**Joining without typing an IP.** When the host opens the lobby, the screen shows a QR
+code generated on the spot. Anyone points their phone camera at it and they are in. The
+join link is printed underneath for people who would rather type or paste it, and the
+terminal also prints a scannable QR code and the link when the server starts. On some
+networks the friendlier `http://<hostname>.local:3000` address (mDNS) works too, so
+that is offered as a fallback.
+
+**Firewall.** The first time you run it on Windows, allow Node (or `omi.exe`) through
+the firewall on private networks when prompted. Without that, other devices cannot
+reach port 3000.
+
+## How to play
+
+The game has a built-in **How to Play** panel (the round `?` button, bottom right of
+every screen) written in plain English. The short version:
+
+1. Start the server, then everyone opens the join link or scans the QR code and enters
+   a name. The first person in is the host.
+2. The host picks a mode and starts. In the 4 player mode the lobby also shows a
+   TEAMS panel: the host presses **CHANGE PARTNERS** to cycle through the three
+   possible pairings until everyone is happy with who plays with whom, and the
+   game then seats each pair across from each other.
+3. Modes:
+   - **2 players (Duel):** 8 cards each plus a draw pile. The pile's top card sets
+     trump, and both players draw a fresh card after each trick. Best of 5 rounds.
+   - **3 players (Free for All):** 30 cards, 10 tricks a round, every trick is a point,
+     first to 25.
+   - **4 players (Team Mode):** the full Sri Lankan game with a real persistent deck
+     (details below), first team to 10 tokens.
+4. Empty seats are played by bots.
+5. Follow the suit that was led if you can. Trump beats everything else, otherwise the
+   highest card of the led suit wins the trick.
+
+### The 4 player deck and scoring
+
+Deal and play run counter-clockwise, following the standard rules
+([pagat.com](https://www.pagat.com/whist/omi.html)). The same 32 cards circulate the
+whole game and are never reshuffled by the computer between rounds. A round goes:
+
+1. **Wash:** the dealer drags the pile around to smoosh the cards.
+2. **Shuffle:** chop overhand packets off the deck by clicking it, or riffle the two
+   halves together, as many times as you like.
+3. **Cut:** the opponent to the dealer's left slices the squared stack and restacks it.
+4. **Deal 4 and call trump:** the player to the dealer's right gets the first 4 cards
+   and picks the trump suit before anyone gets more.
+5. **Deal 4 more:** hands fill to 8 and the trump caller leads.
+6. Each trick is gathered face-down in the order it was played. Those piles become next
+   round's deck, and the deal passes to the right.
+
+Scores are kept the traditional way, with the 20 unused cards acting as tokens. First
+team to capture 10 tokens wins.
+
+| Result | Tokens |
+| --- | --- |
+| Trump caller's team takes 5 to 7 tricks | +1 to the callers |
+| Defenders take 5 to 7 tricks | +2 to the defenders |
+| Announced Kapothi, swept all 8 | +3 to the sweepers |
+| Announced Kapothi, then lost a trick | +4 to the opponents |
+| Unannounced sweep of all 8 | scores as a normal win (+1 or +2) |
+| 4 to 4 draw | no tokens, a bonus token waits for the next winners |
+
+**Kapothi** (called *Basthe* in the south) is the all-or-nothing call. After a team
+wins the first 6 tricks, the leader decides before the 7th whether to announce it and
+play for +3, or stay quiet for the safe +1 or +2.
+
+**Ending early.** Anyone can press **END MATCH EARLY** under the scoreboard. If every
+player agrees, the match stops and the highest score wins. Level scores end in a draw.
+A single decline cancels the vote.
+
+## Leaderboard
+
+Winning 4 player teams are recorded on a persistent leaderboard, reachable from the
+🏆 button on the start screen and the game-over screen.
+
+- The team name is generated automatically as `Player One + Player Two`, so nobody types
+  a separate name.
+- Only a team's **highest** score is kept. If the same pair plays again and does better,
+  their entry updates; a lower score is ignored, and there are no duplicate rows.
+- Entries are sorted highest first, and each stores the score and the date it was set.
+  The top three are highlighted.
+- Only all-human winning teams are recorded (a team with a bot in it is skipped).
+
+The board is served read-only at `GET /api/leaderboard` and survives server restarts.
+
+## Database
+
+Persistence lives behind a small database layer in `database/`, so game logic never
+touches storage directly and the backend can be swapped later.
+
+- **SQLite** (via `better-sqlite3`) is the default. One row per team, keyed by team
+  name, updated in place with an upsert that keeps the higher score.
+- If a native SQLite build is not available (for example inside the packaged `omi.exe`),
+  it automatically falls back to a **JSON file** store with the same interface. Force a
+  backend with `DB_DRIVER=sqlite` or `DB_DRIVER=json`.
+- Moving to PostgreSQL later means writing one more store with the same three methods
+  (`submit`, `top`, `close`) and selecting it in `database/index.js`; nothing above the
+  database layer changes.
+
+`GET /api/healthz` returns a small JSON health check for platform probes.
+
+## Security model
+
+The server is meant to run on a private Wi-Fi network, so I threat-modelled it for that
+setting and mapped each control to a known weakness class. Weaknesses are referenced by
+[MITRE CWE](https://cwe.mitre.org) ID, attacker techniques by
+[MITRE ATT&CK](https://attack.mitre.org), and dependency issues by CVSS score and
+GitHub Security Advisory (GHSA) ID.
+
+| Risk | What could go wrong | Control | Reference |
+| --- | --- | --- | --- |
+| DNS rebinding | A malicious web page resolves its own domain to your LAN IP and scripts requests to the server | `Host` header allowlist: on a LAN only localhost and RFC 1918 private ranges are served; in production it honours `ALLOWED_HOSTS`. Everything else gets 403 | CWE-350, CWE-346 |
+| Cross-site WebSocket hijacking | Raw WebSockets ignore CORS, so another site could open a socket to the game | Same-origin handshake in `allowRequest`, foreign `Origin` rejected at connect | CWE-1385, CWE-346 |
+| Event flooding and resource exhaustion | A client spams messages or HTTP requests to pin the CPU or exhaust memory | Per-socket token bucket (about 20 events/s), 16 connection cap, 100 KB socket payload cap, persistent flooders dropped, plus per-IP HTTP rate limiting (`express-rate-limit`) and a 16 KB request-body cap | CWE-400, CWE-770, ATT&CK T1499 |
+| Slow-request holding (Slowloris) | Half-open requests held to tie up the server | `headersTimeout` and `requestTimeout` trim slow windows | CWE-400, ATT&CK T1499.001 |
+| Malicious input in names | Control, zero-width, or bidirectional-override characters used to spoof or corrupt display (the Trojan Source class, CVE-2021-42574) | Names are stripped to printable characters before use | CWE-20, CWE-1007 |
+| Client-side cheating | A modified client tries to peek at hands or act out of turn | Server is authoritative, every action is validated, and a player is only ever sent their own hand | CWE-602, CWE-359 |
+| Clickjacking and MIME sniffing | The page framed by a hostile site, or responses reinterpreted as script | Headers set with **helmet**: `X-Frame-Options: DENY`, `frame-ancestors 'none'`, `X-Content-Type-Options: nosniff`, a strict Content-Security-Policy with no inline scripts, and a locked-down Permissions-Policy | CWE-1021, CWE-16 |
+| Leaderboard input | A team name or score crafted to inject or corrupt display | Names are sanitized the same way as player names; scores are validated as positive integers before storage | CWE-20 |
+
+Responses are also **gzip-compressed** (`compression`) and the framework banner is
+suppressed (`x-powered-by` disabled), so nothing about the stack is advertised.
+
+**Dependencies.** The runtime set stays small (express, socket.io, helmet,
+express-rate-limit, compression, better-sqlite3, dotenv, chalk, and two QR helpers) and
+is scanned with `npm audit`, which draws on the GitHub Advisory Database. The runtime
+packages carry no known CVEs.
+The one advisory that shows up is [GHSA-22r3-9w55-cj54](https://github.com/advisories/GHSA-22r3-9w55-cj54)
+in `pkg`, a **build-time only** tool: a local privilege escalation (CWE-276, CVSS 6.6,
+local vector) that never ships to players and only matters on the machine that compiles
+the executable, so build on a machine you trust.
+
+**How it was checked.** The header, host, and origin filtering, the 404 behaviour, a
+real socket join, and malformed-input survival are all asserted by the automated
+`npm run test:dist` suite against a live server. The `test-sockets.js` suite adds
+duplicate-join, reconnect, and cleanup coverage, and a `socket.io-client` flood test
+confirms a flooding socket is dropped while a well-behaved client keeps playing.
+
+On a LAN the private-host allowlist keeps this safe without extra configuration. To
+expose it publicly, put it behind HTTPS and set `ALLOWED_HOSTS` to your domain.
+
+## How the shuffle stays honest
+
+A normal `Math.random` shuffle is a perfect randomiser, which would quietly erase the
+whole point of a persistent physical deck. Instead the mixing is modelled on how cards
+actually behave, using the standard results from the mathematics of card shuffling:
+
+- Riffles follow the Gilbert-Shannon-Reeds model (cut near the middle on a binomial
+  split, then interleave with probability proportional to each half's remaining size).
+  By the Bayer-Diaconis result, a deck needs roughly seven good riffles to fully mix, so
+  a couple of lazy riffles leave real structure behind.
+- Overhand chops just reverse packet order, which barely mixes, exactly like the real
+  move.
+- A short wash only partially stirs the pile.
+
+The upshot is that if players shuffle lazily, runs of cards from last round's tricks
+survive into the next deal, just like at a real table, and thorough shuffling genuinely
+randomises. The human wash also feeds real entropy into the process: cursor coordinates
+and timings seed the generator, so no two shuffles play out the same.
+
+## Project layout
+
+```
+server.js                     Entry point: Express, security, routes, Socket.IO wiring
+game.js                       Pure game rules and the shuffle model, no I/O
+config/index.js               Environment-driven configuration
+utils/
+  logger.js                   Leveled logger
+  network.js                  LAN address detection, host/origin checks, join URL/QR
+  sanitize.js                 Shared name sanitization
+routes/
+  api.js                      HTTP API (/api/leaderboard, /api/stats, /api/health)
+services/
+  gameManager.js              Lobby, round flow, reconnect, bot scheduling, handlers
+  leaderboardService.js       Leaderboard business logic (validation, team names)
+database/
+  index.js                    Store factory (SQLite, JSON fallback)
+  sqliteStore.js              SQLite backend
+  jsonStore.js                Portable JSON-file backend
+public/
+  index.html                  Client markup shell
+  css/styles.css              Client styles
+  js/app.js                   Client logic
+  sw.js                       Service worker (offline / installable)
+  manifest.webmanifest        Web app manifest
+  favicon.ico                 Multi-size browser-tab icon (16/32/48)
+  icons/                      App icons (SVG + raster), favicon, and the social-preview image
+  404.html, 500.html          Themed error pages
+  socket.io.min.js            Socket.IO browser client, vendored with the repo
+test.js                       Game rules and shuffle-model unit tests
+test-leaderboard.js           Leaderboard unit tests
+test-sockets.js               Socket integration tests (reconnect, cleanup, ...)
+test-dist.js                  Distribution + live-server checks (npm run test:dist)
+.env.example                  Documented environment variables
+```
+
+## Testing
+
+```bash
+npm test            # game rules, shuffle model, leaderboard, and socket behaviour
+npm run test:dist   # required files, package contract, assets, security headers,
+                    # and a live-server smoke test (join, API, malformed input)
+```
+
+`npm test` runs three suites:
+
+- **Game and shuffle** (`test.js`): trick resolution, every scoring case (including the
+  Kapothi variant and draw carry-over), deck persistence across rounds, the statistical
+  properties of the riffle and overhand models, and full bot games in all three modes.
+- **Leaderboard** (`test-leaderboard.js`): team-name generation, dedupe to the highest
+  score, sorting, input validation, and persistence across a store reload.
+- **Sockets** (`test-sockets.js`): duplicate-join prevention, malformed-packet survival,
+  reconnect (reclaiming a seat with a session token), and lobby cleanup.
+
+## Roadmap
+
+The structure is deliberately loose so features can be added without rewrites. The
+database layer, service layer, and API routes are the natural seams for what comes next:
+
+- **Accounts and authentication**, friends, and player profiles.
+- **Match history and richer statistics** (the `/api/stats` endpoint is the starting point).
+- **Achievements and cosmetics**.
+- **Global and season rankings** built on the same leaderboard store, or a PostgreSQL one.
+- **Spectator mode** (watch a game in progress without taking a seat).
+- **Admin tools** over the API layer.
+
+## Troubleshooting
+
+- **To stop the server:** press Ctrl+C in its terminal. For the packaged `omi.exe`, end
+  it from Task Manager or run `taskkill /F /IM omi.exe`. Stopping ends the match for
+  everyone.
+- **Port already in use:** another copy is probably still running. Stop it, or start on
+  another port with `PORT=3001 npm start`. The server prints a clear message instead of
+  crashing silently.
+- **Players cannot connect (LAN):** confirm everyone is on the same Wi-Fi, that Node (or
+  `omi.exe`) is allowed through the firewall on private networks, and that they use the
+  network link, not `localhost`.
+- **Leaderboard resets after redeploy:** point `DATA_DIR` at a persistent volume;
+  ephemeral filesystems wipe the SQLite file on redeploy.

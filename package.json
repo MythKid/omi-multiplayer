@@ -1,0 +1,44 @@
+{
+  "name": "omi",
+  "version": "1.0.0",
+  "description": "Sri Lankan Omi card game for local network multiplayer",
+  "author": "Methindu Damsara (https://nodenull.org)",
+  "license": "MIT",
+  "main": "server.js",
+  "bin": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node test.js && node test-leaderboard.js && node test-sockets.js",
+    "test:dist": "node test-dist.js",
+    "build": "pkg . --targets node18-win-x64 --output omi.exe"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.11.1",
+    "chalk": "4.1.2",
+    "compression": "^1.8.1",
+    "dotenv": "^17.4.2",
+    "express": "^4.18.2",
+    "express-rate-limit": "^8.5.2",
+    "helmet": "^8.2.0",
+    "qrcode": "^1.5.4",
+    "qrcode-terminal": "^0.12.0",
+    "socket.io": "^4.7.2"
+  },
+  "devDependencies": {
+    "pkg": "^5.8.1",
+    "socket.io-client": "^4.8.3"
+  },
+  "pkg": {
+    "assets": [
+      "public/**/*"
+    ],
+    "targets": [
+      "node18-win-x64"
+    ],
+    "outputPath": "."
+  }
+}

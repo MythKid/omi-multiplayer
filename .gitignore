@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Build output (build it with `npm run build`, or attach it to a GitHub Release)
+omi.exe
+
+# Environment and runtime data
+.env
+data/
+
+# Editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs and local tooling
+*.log
+.claude/

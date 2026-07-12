@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Sri Lankan Omi card game for local network multiplayer",
   "author": "Methindu Damsara (https://nodenull.org)",
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "main": "server.js",
   "bin": "server.js",
   "scripts": {

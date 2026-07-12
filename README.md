@@ -1,17 +1,19 @@
 # OMI
 
-A multiplayer web version of **Omi**, the Sri Lankan trick-taking card game. Run it on
-your Wi-Fi and join by scanning a QR code, or deploy it to the internet and share a
-link. Everyone plays from a phone, tablet, or laptop browser. Empty seats are filled
-by bots, so you can also play on your own.
+A real-time multiplayer web application built to demonstrate networking, security, and
+backend engineering, using the traditional Sri Lankan card game Omi as the playable
+centerpiece.
 
-Built by **Methindu Damsara** ([nodenull.org](https://nodenull.org)).
+Live at **[omi.nodenull.org](https://omi.nodenull.org)**. Built by **Methindu Damsara**
+([nodenull.org](https://nodenull.org)).
 
 ## Contents
 
 - [What it is](#what-it-is)
+- [Skills demonstrated](#skills-demonstrated)
 - [Features](#features)
 - [Technologies](#technologies)
+- [Networking and infrastructure](#networking-and-infrastructure)
 - [Screenshots](#screenshots)
 - [Quick start](#quick-start)
 - [Environment variables](#environment-variables)
@@ -20,19 +22,49 @@ Built by **Methindu Damsara** ([nodenull.org](https://nodenull.org)).
 - [How to play](#how-to-play)
 - [Leaderboard](#leaderboard)
 - [Database](#database)
-- [Security model](#security-model)
+- [Security architecture](#security-architecture)
 - [How the shuffle stays honest](#how-the-shuffle-stays-honest)
 - [Project layout](#project-layout)
 - [Testing](#testing)
 - [Roadmap](#roadmap)
+- [License](#license)
 - [Troubleshooting](#troubleshooting)
 
 ## What it is
 
-A Node.js + Express + Socket.IO server that holds the authoritative game state, and a
+OMI is a real-time multiplayer web application built to put networking, security, and
+backend engineering practice on display, not only to reimplement a card game. It is a
+Node.js + Express + Socket.IO server holding the authoritative game state, paired with a
 browser client (plain HTML/CSS/JS, no framework, no build step). The server is split
-into focused modules; persistence for the leaderboard lives behind its own database
-layer so it can be swapped later without touching game code.
+into focused modules, persistence lives behind its own database layer, and the whole
+thing runs continuously deployed behind Cloudflare on Northflank (see
+[Networking and infrastructure](#networking-and-infrastructure)).
+
+Underneath the infrastructure, it is also a genuine implementation of **Omi**, the Sri
+Lankan trick-taking card game: 2, 3, and 4 player modes, a real persistent physical deck
+for the 4 player game, bots filling empty seats, and a shuffle model built on the actual
+mathematics of card mixing rather than a perfect randomiser (see
+[How the shuffle stays honest](#how-the-shuffle-stays-honest)).
+
+## Skills demonstrated
+
+- **Networking:** HTTP and WebSocket protocols end to end, reverse proxy chains, DNS and
+  subdomain routing, TLS termination, proxy header trust (`X-Forwarded-For`,
+  `X-Forwarded-Proto`), and OS-level LAN address discovery (see
+  [Networking and infrastructure](#networking-and-infrastructure)).
+- **Security:** a threat model mapped to CWE and MITRE ATT&CK, a strict
+  Content-Security-Policy, Host header and WebSocket origin validation, rate limiting
+  and connection caps, and input sanitization against control-character and
+  bidirectional-override attacks (see
+  [Security architecture](#security-architecture)).
+- **Cloud and deployment:** continuous deployment from GitHub, buildpack builds with no
+  Dockerfile, a health check endpoint wired to a platform liveness probe, and
+  environment-driven configuration across local, LAN, and production (see
+  [Deployment](#deployment)).
+- **Backend engineering:** an authoritative real-time state machine over Socket.IO, a
+  modular service layer, a swappable persistence layer with automatic fallback, and
+  three automated test suites covering rules, sockets, and distribution readiness (see
+  [Testing](#testing)).
 
 ## Features
 
@@ -49,8 +81,10 @@ layer so it can be swapped later without touching game code.
 - **Join by QR code or invite link**, plus a scannable code in the terminal.
 - **Responsive and accessible**: adapts from phones to tablets to desktops, with keyboard
   play, focus indicators, ARIA labels, and reduced-motion support.
-- **Deploys anywhere**: runs from source, sits behind a reverse proxy (Cloudflare,
-  Koyeb) over HTTPS, or packages to a single-file `omi.exe` for LAN play.
+- **Deploys anywhere**: runs from source, sits behind a reverse proxy over HTTPS, or
+  packages to a single-file `omi.exe` for LAN play. The hosted copy at
+  [omi.nodenull.org](https://omi.nodenull.org) runs continuously deployed on Northflank
+  behind Cloudflare.
 
 ## Technologies
 
@@ -58,7 +92,133 @@ layer so it can be swapped later without touching game code.
 - **Security:** helmet, express-rate-limit, compression, a strict Content-Security-Policy.
 - **Storage:** SQLite via better-sqlite3, behind a database layer with a JSON fallback.
 - **Client:** vanilla HTML/CSS/JavaScript, a service worker, and a web app manifest.
+- **Deployment:** Northflank (buildpack builds, continuous delivery from GitHub) behind
+  Cloudflare (DNS, TLS, CDN).
 - **Tooling:** dotenv for configuration, pkg for the optional Windows executable.
+
+## Networking and infrastructure
+
+### Architecture overview
+
+A request or game action passes through several hops before it reaches the game engine:
+
+```mermaid
+flowchart TD
+    A[Browser] -->|HTTPS or WSS| B["Cloudflare<br/>DNS - TLS - CDN - reverse proxy"]
+    B -->|HTTPS| C["Northflank<br/>load balancer and container"]
+    C --> D["Express<br/>helmet, rate limiting, static assets"]
+    D --> E["Socket.IO<br/>per-socket rate limiting, origin checks"]
+    E --> F["Game Manager<br/>services/gameManager.js"]
+    F --> G["game.js<br/>pure rules engine, no I/O"]
+    D --> H["Leaderboard API<br/>routes/api.js"]
+    H --> I[("SQLite or JSON store")]
+```
+
+Cloudflare terminates the public connection and proxies it to Northflank, which runs the
+Node process in a container. Express applies security headers and rate limiting before
+anything reaches game logic, and Socket.IO carries the real-time traffic to the game
+manager, which is the only thing that ever touches `game.js`, the pure rules engine.
+
+### Cloudflare: DNS, TLS, and the edge
+
+`nodenull.org` is my portfolio site; `omi.nodenull.org` is a subdomain pointed at this
+project specifically, so the two stay on separate infrastructure behind one domain.
+Cloudflare sits in front of Northflank and handles:
+
+- **DNS:** the `omi` subdomain resolves to Northflank's edge.
+- **TLS termination:** Cloudflare holds the public-facing certificate, so browsers see
+  valid HTTPS even though the certificate work happens at the edge.
+- **CDN:** static assets (CSS, client JS, icons) can be cached at Cloudflare's edge; the
+  API and Socket.IO paths are never cached (the service worker on the client follows the
+  same rule, see [Project layout](#project-layout)).
+- **Reverse proxy:** Cloudflare forwards the request to Northflank over a second,
+  separate TLS connection, configured in **Full (strict)** mode, so Cloudflare validates
+  Northflank's own certificate rather than trusting whatever the origin presents.
+
+### Northflank: buildpack deploys and continuous delivery
+
+The app deploys straight from this GitHub repository with no Dockerfile. Northflank's
+buildpack detects Node.js from `package.json` (the `engines.node` field pins the
+version), installs dependencies, and runs `npm start`. Every push to `main` triggers a
+rebuild and redeploy automatically:
+
+```mermaid
+flowchart LR
+    A["git push main"] --> B[GitHub]
+    B -->|webhook| C["Northflank buildpack"]
+    C -->|npm install| D["Build"]
+    D -->|deploy| E["Running container"]
+    E -->|"GET /api/healthz"| F["Liveness probe"]
+    F -->|ok| G["Traffic served"]
+```
+
+`GET /api/healthz` (see [Database](#database)) is wired up as Northflank's health check,
+so the platform knows to restart the container if the process hangs instead of leaving a
+dead instance behind. Environment variables (`NODE_ENV`, `ALLOWED_HOSTS`, `PUBLIC_URL`,
+`DATA_DIR`, and so on, see [Environment variables](#environment-variables)) are set in
+Northflank's dashboard rather than committed to the repo, and the leaderboard's SQLite
+file lives on a persistent volume so it survives redeploys.
+
+### Trusting the reverse proxy
+
+Every request Express sees technically comes from Northflank's internal network, not the
+player's browser, so the app has to be told which hops to trust for the real client
+address and protocol:
+
+```mermaid
+flowchart LR
+    A["Client (real IP)"] --> B[Cloudflare]
+    B -->|"adds X-Forwarded-For, X-Forwarded-Proto"| C["Northflank proxy"]
+    C --> D["Express: app.set('trust proxy', TRUST_PROXY)"]
+    D --> E["req.ip is the real client IP<br/>req.protocol is https"]
+```
+
+`TRUST_PROXY` (default `1`) tells Express how many proxy hops to trust when reading
+`X-Forwarded-For`. Get this wrong in either direction and two things break: rate limiting
+keys off the wrong IP (either everyone shares Northflank's IP and gets rate-limited
+together, or a spoofed header is trusted blindly), and the app cannot tell whether it is
+actually being served over HTTPS.
+
+### TLS end to end
+
+```mermaid
+flowchart LR
+    A[Browser] -->|TLS 1.3| B["Cloudflare edge"]
+    B -->|"TLS, Full (strict)"| C["Northflank origin"]
+    C -->|"plain HTTP, private network only"| D["Express and Socket.IO"]
+```
+
+The connection is encrypted from the browser to Cloudflare, and again from Cloudflare to
+Northflank; only the last hop, inside Northflank's private network, is plain HTTP. The
+server's Content-Security-Policy explicitly allows `wss:` in `connectSrc` (see
+`server.js`), so the Socket.IO connection upgrades to a secure WebSocket rather than
+falling back to polling.
+
+### The Socket.IO connection lifecycle
+
+```mermaid
+sequenceDiagram
+    participant C as Browser
+    participant P as Cloudflare / Northflank
+    participant S as Express + Socket.IO
+    participant G as Game Manager
+
+    C->>P: GET /socket.io/ (Upgrade: websocket)
+    P->>S: proxied upgrade request
+    S->>S: allowRequest() checks Host and Origin
+    S-->>C: 101 Switching Protocols
+    C->>S: emit("join", { name })
+    S->>G: handleJoin()
+    G-->>C: emit("lobby-update")
+```
+
+Every socket gets its own token-bucket rate limiter the moment it connects (see
+[Security architecture](#security-architecture)), and `allowRequest` rejects the
+handshake outright if the `Host` or `Origin` header does not check out, before a single
+game event is processed.
+
+For how the server finds its own address on a local network rather than behind
+Cloudflare, see [Hosting it on your network](#hosting-it-on-your-network).
 
 ## Screenshots
 
@@ -131,29 +291,46 @@ defaults.
 
 ## Deployment
 
-The server is ready to run behind a reverse proxy such as Cloudflare or a platform like
-Koyeb, over HTTPS. It calls `app.set('trust proxy', ...)`, so it reads the real client
-IP and protocol from the proxy, and it makes no `localhost`-only assumptions.
+The hosted copy at **[omi.nodenull.org](https://omi.nodenull.org)** runs on
+**Northflank**, deployed straight from this repository with a buildpack build (no
+Dockerfile), behind **Cloudflare** for DNS, TLS, and edge proxying. See
+[Networking and infrastructure](#networking-and-infrastructure) for the full request
+path and the reasoning behind each piece.
 
-A typical production configuration:
+It calls `app.set('trust proxy', ...)`, so it reads the real client IP and protocol from
+the proxy chain, and it makes no `localhost`-only assumptions, which is what lets the
+same code run unmodified on a laptop, a LAN host, or behind Cloudflare and Northflank.
+
+The production configuration behind the live deployment:
 
 ```bash
 NODE_ENV=production
-PORT=8080                      # or whatever the platform assigns
-ALLOWED_HOSTS=omi.example.com  # your domain(s)
-PUBLIC_URL=https://omi.example.com
-DATA_DIR=/data                 # a persistent volume, so scores survive redeploys
+PORT=8080                        # or whatever the platform assigns
+ALLOWED_HOSTS=omi.nodenull.org
+PUBLIC_URL=https://omi.nodenull.org
+TRUST_PROXY=1                     # one hop: Northflank's own proxy in front of the container
+DATA_DIR=/data                    # a Northflank persistent volume, so scores survive redeploys
 ```
 
 Notes:
 
-- Set `ALLOWED_HOSTS` to your domain in production. With it set, the server answers only
-  for those hostnames; left empty in production it trusts the proxy and answers any host.
-- Attach a **persistent volume** and point `DATA_DIR` at it. On an ephemeral filesystem
-  the SQLite file is wiped on redeploy, and the leaderboard would reset.
-- WebSockets must be allowed through the proxy (Cloudflare and Koyeb both proxy them by
-  default). The client connects over `wss:` automatically on HTTPS.
-- The `omi.exe` build is for LAN play only; deploy with Node, not the executable.
+- `ALLOWED_HOSTS` locks the server to this exact hostname; without it, production trusts
+  the proxy and answers any host, which is fine on a platform where the proxy already
+  filters traffic, but tighter is safer.
+- The persistent volume matters: on an ephemeral container filesystem the SQLite file is
+  wiped on every redeploy, and the leaderboard would reset (see
+  [Database](#database) for the planned fix).
+- WebSockets are proxied by both Cloudflare and Northflank by default; the client
+  connects over `wss:` automatically once the page itself is served over HTTPS.
+- `GET /api/healthz` is wired up as Northflank's health check, so a hung process gets
+  restarted instead of serving nobody silently.
+- The `omi.exe` build is for LAN play only; the cloud deployment runs the Node process
+  directly, not the packaged executable.
+
+To deploy this elsewhere, any platform that runs a long-lived Node process behind HTTPS
+works the same way: set `ALLOWED_HOSTS` and `PUBLIC_URL` to your domain, point
+`DATA_DIR` at persistent storage, and make sure WebSocket upgrades are allowed through
+whatever sits in front of it.
 
 ## Hosting it on your network
 
@@ -166,6 +343,15 @@ and VPN clients). The naive "first non-internal IPv4" trick often picks one of t
 virtual adapters, and then the address shown to players is one nobody can actually
 reach. To avoid that, the server figures out its address two ways and prefers the more
 reliable one:
+
+```mermaid
+flowchart TD
+    A["Open a UDP socket"] --> B["connect() toward 8.8.8.8:53"]
+    B --> C["No packet is actually sent<br/>the OS just resolves the route"]
+    C --> D["Read the socket's local address"]
+    D --> E["That is the interface holding<br/>the default route"]
+    E --> F["Advertise it as the LAN join address"]
+```
 
 1. It opens a UDP socket and "connects" it toward a public address. UDP connect sends
    no packets, it just runs the OS routing table, so the local address that comes back
@@ -274,12 +460,23 @@ touches storage directly and the backend can be swapped later.
   (`submit`, `top`, `close`) and selecting it in `database/index.js`; nothing above the
   database layer changes.
 
+**Why this is not the final word on persistence.** SQLite works well for development and
+for a platform with a persistent volume attached, which is how the live deployment runs
+it today. On a container platform without one, though, a redeploy or a restart wipes an
+ephemeral filesystem and the leaderboard resets, since there is nothing durable
+underneath the database file itself. The next planned step is a store backed by
+**Turso** (distributed SQLite over libSQL), which keeps the same `submit` / `top` /
+`close` interface and the same SQL, but replaces the local file with a durable,
+replicated database, so the leaderboard survives container recreation without needing a
+volume at all.
+
 `GET /api/healthz` returns a small JSON health check for platform probes.
 
-## Security model
+## Security architecture
 
-The server is meant to run on a private Wi-Fi network, so I threat-modelled it for that
-setting and mapped each control to a known weakness class. Weaknesses are referenced by
+The server is meant to run on a private Wi-Fi network as well as behind Cloudflare in
+production, so I threat-modelled it for both settings and mapped each control to a known
+weakness class. Weaknesses are referenced by
 [MITRE CWE](https://cwe.mitre.org) ID, attacker techniques by
 [MITRE ATT&CK](https://attack.mitre.org), and dependency issues by CVSS score and
 GitHub Security Advisory (GHSA) ID.
@@ -294,6 +491,44 @@ GitHub Security Advisory (GHSA) ID.
 | Client-side cheating | A modified client tries to peek at hands or act out of turn | Server is authoritative, every action is validated, and a player is only ever sent their own hand | CWE-602, CWE-359 |
 | Clickjacking and MIME sniffing | The page framed by a hostile site, or responses reinterpreted as script | Headers set with **helmet**: `X-Frame-Options: DENY`, `frame-ancestors 'none'`, `X-Content-Type-Options: nosniff`, a strict Content-Security-Policy with no inline scripts, and a locked-down Permissions-Policy | CWE-1021, CWE-16 |
 | Leaderboard input | A team name or score crafted to inject or corrupt display | Names are sanitized the same way as player names; scores are validated as positive integers before storage | CWE-20 |
+
+Two of these controls are worth walking through, since they are the ones that decide
+whether a request reaches the game at all:
+
+**Host header validation** stops DNS rebinding: a malicious page could resolve its own
+domain to your LAN IP and then script requests straight at the server. Every request is
+checked before anything else runs:
+
+```mermaid
+flowchart LR
+    A[Incoming request] --> B{"Host header allowed?<br/>ALLOWED_HOSTS, or a private range on a LAN"}
+    B -->|No| C["403 Forbidden"]
+    B -->|Yes| D["Request proceeds"]
+```
+
+**WebSocket origin validation** stops cross-site WebSocket hijacking: raw WebSockets
+ignore CORS, so without this check any page on the internet could open a socket
+straight into the game.
+
+```mermaid
+flowchart LR
+    A["WebSocket handshake"] --> B{"Origin host matches<br/>the Host header?"}
+    B -->|No| C["Connection rejected"]
+    B -->|Yes| D["allowRequest() allows the socket"]
+```
+
+**What Helmet actually turns on:**
+
+- `X-Frame-Options: DENY` and `frame-ancestors 'none'`: stops the page from being framed
+  by another site (clickjacking).
+- A strict Content-Security-Policy with no `unsafe-inline` scripts: the main defense
+  against injected script execution (XSS), since a script tag from anywhere but this
+  origin simply will not run.
+- `X-Content-Type-Options: nosniff`: stops the browser from reinterpreting a response as
+  a different content type than the one declared.
+- A locked-down Permissions-Policy: disables browser features (camera, microphone,
+  geolocation, and so on) the app never uses, so a compromised script has nothing extra
+  to reach for.
 
 Responses are also **gzip-compressed** (`compression`) and the framework banner is
 suppressed (`x-powered-by` disabled), so nothing about the stack is advertised.
@@ -313,8 +548,10 @@ real socket join, and malformed-input survival are all asserted by the automated
 duplicate-join, reconnect, and cleanup coverage, and a `socket.io-client` flood test
 confirms a flooding socket is dropped while a well-behaved client keeps playing.
 
-On a LAN the private-host allowlist keeps this safe without extra configuration. To
-expose it publicly, put it behind HTTPS and set `ALLOWED_HOSTS` to your domain.
+On a LAN the private-host allowlist keeps this safe without extra configuration. In
+production, `ALLOWED_HOSTS` is set to `omi.nodenull.org` and the app sits behind
+Cloudflare and Northflank's own network protections (see
+[Networking and infrastructure](#networking-and-infrastructure)).
 
 ## How the shuffle stays honest
 
@@ -394,12 +631,21 @@ npm run test:dist   # required files, package contract, assets, security headers
 The structure is deliberately loose so features can be added without rewrites. The
 database layer, service layer, and API routes are the natural seams for what comes next:
 
+- **Turso-backed leaderboard storage**, so the live deployment survives container
+  recreation without depending on a persistent volume (see [Database](#database)).
 - **Accounts and authentication**, friends, and player profiles.
 - **Match history and richer statistics** (the `/api/stats` endpoint is the starting point).
 - **Achievements and cosmetics**.
 - **Global and season rankings** built on the same leaderboard store, or a PostgreSQL one.
 - **Spectator mode** (watch a game in progress without taking a seat).
 - **Admin tools** over the API layer.
+
+## License
+
+This project is source-available, not open source: the code is here to read, clone, and
+run locally for evaluation, but redistribution, commercial use, and public redeployment
+are reserved. See [LICENSE](LICENSE) for the exact terms. If you would like to use part
+of this project elsewhere, reach out through [nodenull.org](https://nodenull.org).
 
 ## Troubleshooting
 

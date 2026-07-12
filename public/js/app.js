@@ -1841,6 +1841,26 @@
       socket.emit('vote-end', { action: 'propose' });
     });
 
+    function goHome() {
+      try { socket.disconnect(); } catch (e) {}
+      window.location.href = 'https://nodenull.org/';
+    }
+
+    $('btn-home').addEventListener('click', function () {
+      // Only the join screen has nothing to lose; the lobby and an active
+      // game both warrant a confirmation before leaving everyone else behind.
+      var inLobbyOrGame = $('screen-join').style.display === 'none';
+      if (inLobbyOrGame) {
+        $('home-confirm-overlay').style.display = 'flex';
+      } else {
+        goHome();
+      }
+    });
+    $('btn-home-leave').addEventListener('click', goHome);
+    $('btn-home-stay').addEventListener('click', function () {
+      $('home-confirm-overlay').style.display = 'none';
+    });
+
     $('btn-info').addEventListener('click', function () {
       $('info-overlay').style.display = 'flex';
     });

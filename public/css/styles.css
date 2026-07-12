@@ -46,7 +46,7 @@
      and large-movement effects while leaving the game readable. */
   @media (prefers-reduced-motion: reduce) {
     .ptag.active, .kapothi-btn.announce, #kapothi-banner,
-    #btn-info, .tok.pop { animation: none !important; }
+    #btn-info, #btn-home, .tok.pop { animation: none !important; }
     .conf { display: none !important; }
     .splash-item { animation-duration: .35s !important; }
     .lb-row { animation: none !important; }
@@ -1047,6 +1047,23 @@
     to   { transform: translateX(-50%) translateY(0); opacity: 1; }
   }
 
+  /* ---------- Home button ---------- */
+  #btn-home {
+    position: fixed;
+    left: max(14px, env(safe-area-inset-left));
+    bottom: max(14px, env(safe-area-inset-bottom));
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    border: 1px solid #c9a227;
+    background: rgba(0,0,0,.55);
+    color: #e8c547;
+    font-size: 17px;
+    z-index: 90;
+    box-shadow: 0 4px 14px rgba(0,0,0,.5);
+    transition: transform .15s, box-shadow .15s;
+  }
+  #btn-home:hover { transform: scale(1.12); box-shadow: 0 0 16px rgba(232,197,71,.5); }
+
   /* ---------- Info / How-to-play ---------- */
   #btn-info {
     position: fixed;
@@ -1118,6 +1135,7 @@
   @media (max-width: 760px), (max-height: 560px) {
     #scores { padding: 6px 8px; min-width: 100px; max-width: 126px; max-height: 52vh; overflow-y: auto; }
     #btn-info { width: 34px; height: 34px; font-size: 16px; }
+    #btn-home { width: 34px; height: 34px; font-size: 14px; }
     #lobby-qr { width: 168px; height: 168px; }
     .sc-h { font-size: 9px; letter-spacing: 2px; margin-bottom: 3px; }
     .sc-row { font-size: 11px; gap: 4px; }
@@ -1189,7 +1207,7 @@
   }
 
   /* Overlays */
-  #overlay, #dc-overlay {
+  #overlay, #dc-overlay, #home-confirm-overlay {
     position: fixed;
     inset: 0;
     background: rgba(5, 15, 9, .82);

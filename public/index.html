@@ -130,6 +130,9 @@
     </div>
   </div>
 
+  <!-- Home button: back to the portfolio site, confirming first if a game is in progress -->
+  <button id="btn-home" title="Home" aria-label="Return to home page">🏠</button>
+
   <!-- Info button + How-to-play overlay -->
   <button id="btn-info" title="How to play" aria-label="How to play">?</button>
 
@@ -229,6 +232,16 @@
       <div class="ov-title">⚠ Player Disconnected</div>
       <div id="dc-msg" class="ov-note"></div>
       <button id="btn-back-lobby">BACK TO LOBBY</button>
+    </div>
+  </div>
+
+  <!-- OVERLAY: Confirm leaving to the home page -->
+  <div id="home-confirm-overlay" style="display:none" role="dialog" aria-modal="true" aria-label="Leave game">
+    <div class="ov-box">
+      <div class="ov-title">NodeNull</div>
+      <div class="ov-note">Abandon the current game and return to the home page?</div>
+      <button id="btn-home-leave" class="ov-btn-pri">LEAVE GAME</button>
+      <button id="btn-home-stay" class="btn-secondary" style="margin-top:10px">STAY IN GAME</button>
     </div>
   </div>
 

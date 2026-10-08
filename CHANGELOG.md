@@ -19,6 +19,12 @@ protocol or stored data, a minor version adds features, a patch fixes bugs.
 - On a home network the server now accepts its own `.local` name, so that alternative
   link actually opens the game instead of being refused.
 - The lobby no longer sends the server's internal IP address and port to players.
+- **New versions now load straight away, on every device.** Browsers (and the CDN in
+  front of the site) could keep the old game for hours after an update. Every script
+  and stylesheet now loads from a URL tied to its contents, the page itself is never
+  cached, and a tab left open across an update reloads itself onto the new version.
+  Nobody needs to clear their cache or use a private window.
+- Table chat has a new quick message: 🐽.
 
 ### Small touches
 

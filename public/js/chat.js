@@ -5,7 +5,7 @@
 (function () {
   'use strict';
 
-  var QUICK = ['Good game', 'Nice hand!', 'Well played', 'Sorry!', 'Hurry up 😅', '👍'];
+  var QUICK = ['Good game', 'Nice hand!', 'Well played', 'Sorry!', 'Hurry up 😅', '👍', '🐽'];
   var BUBBLE_MS = 4000;
   var BUBBLE_CHARS = 60;
   var MAX_ROWS = 60;

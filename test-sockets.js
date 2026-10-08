@@ -18,9 +18,15 @@ let failures = 0;
 const ok = (c, m) => { console.log((c ? '  PASS  ' : '  FAIL  ') + m); if (!c) failures++; };
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// The build id the server stamps into the page, presented like a real client.
+let BUILD = '';
+async function loadBuild() {
+  const html = await (await fetch(URL + '/')).text();
+  BUILD = (html.match(/<meta name="omi-build" content="([0-9a-f]+)">/) || [])[1] || '';
+}
 function connect(opts) {
   const o = Object.assign({ transports: ['websocket'], reconnection: false }, opts || {});
-  o.auth = Object.assign({ v: PROTOCOL }, o.auth || {});
+  o.auth = Object.assign({ v: PROTOCOL, build: BUILD }, o.auth || {});
   return io(URL, o);
 }
 function waitEvent(sock, event, ms) {
@@ -75,6 +81,7 @@ function startServer(extraEnv) {
 async function run() {
   console.log('socket integration tests\n');
   await startServer();
+  await loadBuild();
 
   // --- the tables screen ---
   const viewer = connect();
@@ -211,6 +218,16 @@ async function run() {
   const old = io(URL, { transports: ['websocket'], reconnection: false, auth: { v: 1 } });
   ok(!!(await waitEvent(old, 'version-mismatch', 2000)), 'a client on another protocol version is told to reload');
   old.close();
+  // A page from an older build (a tab left open across a deploy, or a copy
+  // from a cache) is told to reload too, and told which build is current.
+  ok(/^[0-9a-f]{12}$/.test(BUILD), 'the page carries a build id (' + BUILD + ')');
+  const stalePage = connect({ auth: { build: '000000000000' } });
+  const nudge = await waitEvent(stalePage, 'version-mismatch', 2000);
+  ok(nudge && nudge.build === BUILD, 'a page from an older build is told to reload to the current one');
+  stalePage.close();
+  const currentPage = connect();
+  ok(!(await waitEvent(currentPage, 'version-mismatch', 800)), 'a page on the current build is left alone');
+  currentPage.close();
 
   // --- the end-match vote, then the results screen and a rematch ---
   resumed.emit('vote-end', { action: 'propose' });

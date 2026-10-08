@@ -11,6 +11,7 @@ const rateLimit = require('express-rate-limit');
 const { Server } = require('socket.io');
 const qrterminal = require('qrcode-terminal');
 const qr = require('./utils/qr');
+const assets = require('./utils/assets');
 
 const config = require('./config');
 const logger = require('./utils/logger');
@@ -101,12 +102,33 @@ app.use(helmet({
 
 app.use('/api', apiLimiter, apiRoutes);
 
+// The app page, with every script and stylesheet URL fingerprinted (see
+// utils/assets.js). It must never be cached: it is what points browsers at
+// the current files. A matching ETag still answers 304.
+function sendIndex(req, res) {
+  const page = assets.indexPage();
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('ETag', page.etag);
+  res.type('html').send(page.html);
+}
+app.get(['/', '/index.html'], sendIndex);
+
 // Static assets. path.join(__dirname, 'public') resolves inside the packaged
-// snapshot too. The web manifest gets its correct type explicitly.
-const publicDir = path.join(__dirname, 'public');
+// snapshot too. Validators come from file contents, because the build gives
+// every file the same 1980 date. A URL carrying the file's current
+// fingerprint (?v=...) never changes, so it is cached for a year; anything
+// else is rechecked on every use.
+const publicDir = assets.PUBLIC_DIR;
 app.use(express.static(publicDir, {
-  setHeaders: (res, filePath) => {
+  index: false,
+  etag: false,
+  lastModified: false,
+  setHeaders: (res, filePath, stat) => {
     if (filePath.endsWith('.webmanifest')) res.type('application/manifest+json');
+    const hash = assets.fileHash(filePath, stat);
+    res.setHeader('ETag', `"${hash}"`);
+    const v = res.req && res.req.query ? res.req.query.v : null;
+    res.setHeader('Cache-Control', v === hash ? 'public, max-age=31536000, immutable' : 'no-cache');
   },
 }));
 
@@ -119,7 +141,7 @@ app.get('*', (req, res) => {
     res.status(404).sendFile(path.join(publicDir, '404.html'));
     return;
   }
-  res.sendFile(path.join(publicDir, 'index.html'));
+  sendIndex(req, res);
 });
 
 // Express error handler: log the detail, return a themed page with no stack.

@@ -27,6 +27,7 @@ const REQUIRED = [
   'test-dist.js', 'test-leaderboard.js', 'test-rating.js', 'test-sockets.js',
   'README.md', 'CHANGELOG.md', 'LICENSE', '.gitignore', '.env.example',
   'config/index.js', 'utils/logger.js', 'utils/network.js', 'utils/sanitize.js', 'utils/qr.js',
+  'utils/assets.js',
   'database/index.js', 'database/sqliteStore.js', 'database/jsonStore.js',
   'services/gameManager.js', 'services/table.js', 'services/chat.js',
   'services/leaderboardService.js', 'services/rating.js', 'services/identity.js', 'routes/api.js',
@@ -114,6 +115,23 @@ ok(/^http:\/\/[\d.]+:3000$/.test(inv.base) && inv.lan === true, 'hosting at home
 inv = inviteOf({ NODE_ENV: 'production' }, { host: '<bad host>' });
 ok(inv.lan === true && !/bad/.test(inv.base), 'a malformed Host header never ends up in an invite');
 
+// Fingerprints come from file contents, not dates: the build stamps every
+// file with the same 1980 date, so two same-size versions must still differ.
+{
+  const os = require('os');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'omi-fp-'));
+  const a = path.join(dir, 'a.js');
+  const b = path.join(dir, 'b.js');
+  fs.writeFileSync(a, 'var x = 1;');
+  fs.writeFileSync(b, 'var x = 2;');
+  const old = new Date('1980-01-01T00:00:01Z');
+  fs.utimesSync(a, old, old);
+  fs.utimesSync(b, old, old);
+  const assets = require('./utils/assets');
+  ok(assets.fileHash(a) !== assets.fileHash(b), 'same size, same 1980 date, different content: different fingerprints');
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
 // ---------------------------------------------------------------------------
 console.log('\n[3] Client assets resolve');
 // ---------------------------------------------------------------------------
@@ -147,6 +165,7 @@ console.log('\n[4] Source integrity');
 [
   'server.js', 'game.js', 'test.js', 'test-dist.js', 'test-leaderboard.js', 'test-rating.js',
   'test-sockets.js', 'config/index.js', 'utils/logger.js', 'utils/network.js', 'utils/sanitize.js', 'utils/qr.js',
+  'utils/assets.js',
   'database/index.js', 'database/jsonStore.js', 'database/sqliteStore.js',
   'services/gameManager.js', 'services/table.js', 'services/chat.js',
   'services/leaderboardService.js', 'services/rating.js', 'services/identity.js', 'routes/api.js',
@@ -291,6 +310,27 @@ async function runSmoke() {
     'GET /manifest.webmanifest served with the manifest type');
   const sw = await request('/sw.js');
   ok(sw.status === 200 && /serviceWorker|caches/i.test(sw.body), 'GET /sw.js serves the service worker');
+  ok(/no-cache/.test(sw.headers['cache-control'] || ''), 'the service worker script is never cached');
+
+  // Cache-busting: new versions must reach every browser straight away.
+  ok(/no-cache/.test(root.headers['cache-control'] || ''), 'the app page is never cached');
+  ok(/<meta name="omi-build" content="[0-9a-f]{12}">/.test(root.body), 'the app page carries a build id');
+  const refs = root.body.match(/\/(?:js\/app|js\/chat|js\/leaderboard|css\/styles|socket\.io\.min)\.(?:js|css)\?v=[0-9a-f]{12}/g) || [];
+  ok(refs.length === 5, 'every script and stylesheet URL is fingerprinted (' + refs.length + '/5)');
+  const appRef = (refs.find(r => r.startsWith('/js/app.js')) || '/js/app.js?v=x');
+  const pinned = await request(appRef);
+  ok(pinned.status === 200 && /immutable/.test(pinned.headers['cache-control'] || ''),
+    'a fingerprinted URL is cached long-term (it changes when the file does)');
+  const plain = await request('/js/app.js');
+  ok(/no-cache/.test(plain.headers['cache-control'] || '') && /^"[0-9a-f]{12}"$/.test(plain.headers.etag || ''),
+    'an unfingerprinted URL is rechecked every time, with a content-based ETag');
+  ok(plain.headers.etag === '"' + appRef.split('v=')[1] + '"', 'the ETag is the same content fingerprint as the URL');
+  const notModified = await request('/js/app.js', { 'If-None-Match': plain.headers.etag });
+  ok(notModified.status === 304, 'an unchanged file answers 304');
+  const pageAgain = await request('/', { 'If-None-Match': root.headers.etag });
+  ok(pageAgain.status === 304, 'an unchanged page answers 304');
+  const wrongV = await request('/js/app.js?v=000000000000');
+  ok(/no-cache/.test(wrongV.headers['cache-control'] || ''), 'a stale fingerprint is never cached long-term');
 
   // A genuinely missing asset returns the themed 404 page.
   const notFound = await request('/nope.png');

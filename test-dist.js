@@ -78,6 +78,22 @@ ok(read('public/index.html').includes('v' + pkg.version + '<'), 'the in-game ver
 ['express', 'socket.io', 'chalk', 'qrcode', 'qrcode-terminal'].forEach(d =>
   ok(pkg.dependencies && pkg.dependencies[d], 'runtime dependency declared: ' + d));
 
+// The socket cap must always leave room for every table's seats, even when an
+// older, smaller MAX_SOCKETS is still set on the hosting platform.
+function socketCap(env) {
+  const base = Object.assign({}, process.env);
+  delete base.MAX_SOCKETS;
+  delete base.MAX_SLOTS;
+  const r = spawnSync(process.execPath, ['-e', "console.log(require('./config').maxSockets)"],
+    { cwd: ROOT, encoding: 'utf8', env: Object.assign(base, env) });
+  return Number(String(r.stdout).trim());
+}
+ok(socketCap({}) === 32, 'MAX_SOCKETS unset: 4 tables get 32 connections');
+ok(socketCap({ MAX_SOCKETS: '16' }) === 20, 'a leftover MAX_SOCKETS=16 is raised to fit 4 tables (20)');
+ok(socketCap({ MAX_SOCKETS: '100' }) === 100, 'a larger MAX_SOCKETS is kept');
+ok(socketCap({ MAX_SLOTS: '2', MAX_SOCKETS: '16' }) === 16, 'MAX_SOCKETS=16 is enough for 2 tables');
+ok(socketCap({ MAX_SOCKETS: 'lots' }) === 32, 'a non-numeric MAX_SOCKETS falls back to the default');
+
 // ---------------------------------------------------------------------------
 console.log('\n[3] Client assets resolve');
 // ---------------------------------------------------------------------------

@@ -36,10 +36,16 @@ const allowedHosts = String(process.env.ALLOWED_HOSTS || '')
 // players, so the socket cap scales with it, plus headroom for people who are
 // browsing the tables screen.
 const maxSlots = Math.max(1, Math.min(16, toInt(process.env.MAX_SLOTS, 4)));
+// Fewer sockets than this would turn players away from tables that still have
+// seats, so a lower explicit value (such as a MAX_SOCKETS=16 left over from
+// 1.x, when there was one table) is raised to it. Fewer tables is the way to
+// use fewer sockets.
+const minSockets = maxSlots * 4 + 4;
 const maxSocketsExplicit = String(process.env.MAX_SOCKETS || '').trim() !== '';
-const maxSockets = maxSocketsExplicit
-  ? Math.max(1, toInt(process.env.MAX_SOCKETS, maxSlots * 4 + 16))
-  : maxSlots * 4 + 16;
+const maxSocketsRequested = maxSocketsExplicit ? toInt(process.env.MAX_SOCKETS, null) : null;
+const maxSockets = maxSocketsRequested === null
+  ? maxSlots * 4 + 16
+  : Math.max(minSockets, maxSocketsRequested);
 
 module.exports = {
   nodeEnv,
@@ -53,7 +59,8 @@ module.exports = {
   publicUrl: String(process.env.PUBLIC_URL || '').trim().replace(/\/$/, ''),
   maxSlots,
   maxSockets,
-  maxSocketsExplicit,
+  maxSocketsRequested, // the MAX_SOCKETS value as set, or null when unset
+  minSockets,
   // A game waiting this long on one human (turn, shuffle, cut, ready check)
   // is ended so an idle player cannot hold a table forever. Lobbies with no
   // activity close after their own timeout.

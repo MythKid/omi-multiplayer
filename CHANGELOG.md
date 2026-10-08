@@ -66,8 +66,10 @@ table rules, and a leaderboard that ranks players properly.
 
 - New settings: `MAX_SLOTS` (tables, default 4), `GAME_IDLE_MIN` (default 5),
   `LOBBY_IDLE_MIN` (default 15).
-- `MAX_SOCKETS` now defaults to `MAX_SLOTS * 4 + 16`. If your platform pins
-  `MAX_SOCKETS=16`, raise it or remove it (the server warns at startup).
+- `MAX_SOCKETS` now defaults to `MAX_SLOTS * 4 + 16`, and is never lower than
+  `MAX_SLOTS * 4 + 4`: a smaller value (such as `MAX_SOCKETS=16` kept from 1.x) is
+  raised to that minimum with a warning, so no setting change is needed to upgrade.
+  The production startup line reports the cap in effect.
 - New read-only API endpoints: `GET /api/tables`, `GET /api/matches`,
   `GET /api/matches/:id`, `GET /api/players/:name/matches`. `GET /api/leaderboard`
   now returns rated players, and `GET /api/health` reports the version.

@@ -150,7 +150,8 @@ server.on('error', (err) => {
 
 function printStartupBanner() {
   if (config.isProduction) {
-    logger.info(`OMI v${version} listening on port ${config.port} (${config.nodeEnv}, ${config.maxSlots} tables)`);
+    logger.info(`OMI v${version} listening on port ${config.port} ` +
+      `(${config.nodeEnv}, ${config.maxSlots} tables, up to ${config.maxSockets} connections)`);
     return;
   }
   // Development / LAN: friendly banner with a scannable QR code.
@@ -185,9 +186,9 @@ async function start() {
       logger.warn(`Could not build the join QR code for table ${id}:`, e.message);
     }
   }
-  if (config.maxSocketsExplicit && config.maxSockets < config.maxSlots * 4 + 4) {
-    logger.warn(`MAX_SOCKETS=${config.maxSockets} is too low for ${config.maxSlots} tables; ` +
-      `use at least ${config.maxSlots * 4 + 4} (or leave it unset).`);
+  if (config.maxSocketsRequested !== null && config.maxSockets !== config.maxSocketsRequested) {
+    logger.warn(`MAX_SOCKETS=${config.maxSocketsRequested} is too low for ${config.maxSlots} tables; ` +
+      `using ${config.maxSockets}. Remove MAX_SOCKETS, or lower MAX_SLOTS to use fewer.`);
   }
 
   server.listen(config.port, config.bindAddress, printStartupBanner);

@@ -305,7 +305,7 @@ defaults.
 | `PUBLIC_URL` | (empty) | Public base URL to advertise in join links / QR when deployed behind a proxy. |
 | `TRUST_PROXY` | `1` | Proxy hops to trust for the real client IP and protocol. |
 | `MAX_SLOTS` | `4` | Number of tables (independent games), 1 to 16. Each seats up to four players. |
-| `MAX_SOCKETS` | `MAX_SLOTS*4 + 16` | Maximum simultaneous connections (seated players plus people browsing tables). |
+| `MAX_SOCKETS` | `MAX_SLOTS*4 + 16` | Maximum simultaneous connections (seated players plus people browsing tables). Never lower than `MAX_SLOTS*4 + 4`; a smaller value is raised to that. |
 | `GAME_IDLE_MIN` | `5` | Minutes a game waits on one player (turn, shuffle, cut, ready) before it ends. A warning shows a minute earlier. |
 | `LOBBY_IDLE_MIN` | `15` | Minutes a table's lobby can sit with no activity before it is cleared. |
 | `DB_DRIVER` | `auto` | `auto` uses SQLite when available, otherwise a JSON file. Force with `sqlite` or `json`. |
@@ -344,9 +344,12 @@ Notes:
 - The persistent volume matters: on an ephemeral container filesystem the SQLite file is
   wiped on every redeploy, and the leaderboard would reset (see
   [Database](#database) for the planned fix).
-- `MAX_SOCKETS` now scales with `MAX_SLOTS` by default. If the platform pins
-  `MAX_SOCKETS=16` explicitly, raise it (the server logs a warning when it is below
-  `MAX_SLOTS*4 + 4`) or remove it.
+- `MAX_SOCKETS` now scales with `MAX_SLOTS` by default. A value set lower than
+  `MAX_SLOTS*4 + 4` (such as a `MAX_SOCKETS=16` kept from 1.x) is raised to that
+  minimum with a warning in the log, so full tables never turn players away; lower
+  `MAX_SLOTS` to use fewer connections. The production startup line reports the cap
+  in effect, for example `OMI v2.0.0 listening on port 8080 (production, 4 tables,
+  up to 32 connections)`.
 - Sizing: each table holds a few KB of game state, up to 50 chat messages, and at most
   five timers, so 4 tables use well under 1 MB plus the Socket.IO buffers. The busiest
   traffic is the dealer's wash relay (about 20 small messages a second to three
@@ -799,6 +802,7 @@ The current version is **2.0.0**. Release notes for every version are in
   network link, not `localhost`.
 - **Leaderboard resets after redeploy:** point `DATA_DIR` at a persistent volume;
   ephemeral filesystems wipe the SQLite file on redeploy.
-- **"The server is full":** raise `MAX_SOCKETS` (or unset it so it follows `MAX_SLOTS`).
+- **"The server is full":** raise `MAX_SOCKETS` (or unset it so it follows `MAX_SLOTS`);
+  the startup line shows the cap in effect.
 - **My games are "not ranked":** use your own name (generic ones are never ranked), and
   play from the browser that first claimed it.

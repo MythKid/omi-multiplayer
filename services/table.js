@@ -63,6 +63,7 @@ class Table {
     this.gameState = null;          // null = in the lobby
     this.endVote = null;            // { agreed: Set<seat> } while an end-match vote is live
     this.resultRecorded = false;    // a finished game is recorded only once
+    this.lastRecord = null;         // what the leaderboard made of it
     this.shuffleFirstMoveAt = null; // wall-clock start of the current human wash
     this.lastDeck = null;           // the physical pack survives between games (4p)
 
@@ -234,39 +235,63 @@ class Table {
       disconnectedSeats: this.players
         .filter(p => p.connected === false && p.seat < gs.mode)
         .map(p => ({ seat: p.seat, name: p.name })),
-      // Once the match is over: who has chosen to stay for a rematch.
+      // Once the match is over: who has chosen to stay for a rematch, and
+      // how this player's match was graded and rated.
       results: gs.gameOver ? {
         stayed: this.players.filter(p => p.choice === 'stay').length,
         total: this.players.length,
+        record: this.recordFor(forSeat),
       } : null,
     };
   }
 
-  // When a 4-player game ends with a two-human winning team, record the team's
-  // final score on the leaderboard. Runs at most once per game.
-  recordResultIfFinished() {
+  // This seat's line from the leaderboard record, for the results screen.
+  recordFor(seat) {
+    const rec = this.lastRecord;
+    if (!rec) return null;
+    const s = rec.seats.find(x => x.seat === seat);
+    if (!s || s.isBot) return null;
+    return {
+      rated: s.rated,
+      grade: s.grade,
+      gradeScore: s.gradeScore,
+      delta: s.delta,
+      rating: s.ratingAfter != null ? Math.round(s.ratingAfter) : null,
+      reason: s.reason,
+      note: rec.note,
+    };
+  }
+
+  // Hand a 4-player match to the leaderboard exactly once, when it finishes
+  // or is abandoned. The service decides whether it counts.
+  recordMatch(endReason, leaverSeat) {
     const gs = this.gameState;
-    if (!gs || !gs.gameOver || this.resultRecorded) return;
+    if (!gs || this.resultRecorded) return this.lastRecord;
     this.resultRecorded = true;
-    if (gs.mode !== 4) return;
-
-    const winner = gs.gameWinner;
-    if (winner !== 'Team A' && winner !== 'Team B') return; // draw or no winner
-    const seats = winner === 'Team A' ? [0, 2] : [1, 3];
-
+    if (gs.mode !== 4) return null;
     const humanBySeat = {};
     this.players.forEach(p => { if (p.seat < gs.mode) humanBySeat[p.seat] = p; });
-    const a = humanBySeat[seats[0]];
-    const b = humanBySeat[seats[1]];
-    if (!a || !b) return; // a bot was on the winning team, skip
-
-    leaderboard.submitTeamResult(a.name, b.name, gs.players[seats[0]].score);
+    this.lastRecord = leaderboard.recordMatch({
+      tableId: this.id,
+      endReason,
+      leaverSeat,
+      history: gs.history,
+      players: gs.players.map((p, seat) => ({
+        seat,
+        name: p.name,
+        team: p.team,
+        isBot: !!p.isAI,
+        score: p.score,
+        identity: humanBySeat[seat] ? humanBySeat[seat].identity : null,
+      })),
+    });
+    return this.lastRecord;
   }
 
   broadcastGameState() {
     const gs = this.gameState;
     if (!gs) return;
-    this.recordResultIfFinished();
+    if (gs.gameOver && !this.resultRecorded) this.recordMatch(gs.endedByVote ? 'vote' : 'completed', -1);
     if (gs.gameOver && !this.resultsTimer) {
       const gen = this.gen;
       this.resultsTimer = setTimeout(() => {
@@ -532,7 +557,7 @@ class Table {
 
   // ---------- Membership ----------
 
-  addPlayer(socket, cleanName) {
+  addPlayer(socket, cleanName, identity) {
     if (!this.canJoin()) {
       return { error: this.gameState ? 'That table is already playing. Pick another one.' : 'That table is full.' };
     }
@@ -552,6 +577,7 @@ class Table {
       graceTimer: null,
       choice: null,
       chatAllow: makeChatLimiter(),
+      identity: identity || null, // how the leaderboard treats this name
     };
     this.players.push(player);
     this.touchLobby();
@@ -597,6 +623,9 @@ class Table {
     const leaver = this.players.find(p => p.seat === leaverSeat) || null;
     const name = leaver ? leaver.name : (gs.players[leaverSeat] || {}).name || 'A player';
     logger.info(`${this.label}: ${name} ${reason}; ending the game`);
+    // After a couple of rounds, walking out is a loss for the leaver's team.
+    const record = this.recordMatch('forfeit', leaverSeat);
+    const forfeitTeam = record && record.rated && gs.players[leaverSeat] ? gs.players[leaverSeat].team : -1;
 
     this.stashDeck(gs);
     this.endGame();
@@ -609,7 +638,7 @@ class Table {
       .forEach(p => this.release(p, p === leaver ? notice : null));
     this.regroupLobby();
 
-    this.emitRoom('game-abandoned', { name, reason });
+    this.emitRoom('game-abandoned', { name, reason, forfeitTeam });
     this.broadcastLobbyUpdate();
     this.notifyChanged();
   }
@@ -764,6 +793,7 @@ class Table {
     this.gen++;
     this.gameState = game.createGame(humans, this.mode, this.mode === 4 ? this.lastDeck : null);
     this.resultRecorded = false;
+    this.lastRecord = null;
     this.endVote = null;
     this.players.forEach(p => { p.ready = false; p.choice = null; });
 

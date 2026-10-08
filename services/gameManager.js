@@ -5,6 +5,7 @@ const config = require('../config');
 const logger = require('../utils/logger');
 const { sanitizeName } = require('../utils/sanitize');
 const Table = require('./table');
+const leaderboard = require('./leaderboardService');
 
 // Bumped whenever the client/server event contract changes. A client built
 // for another version is told to reload so it picks up matching assets.
@@ -104,7 +105,8 @@ function handleJoinTable(socket, payload) {
     socket.emit('join-error', { message: 'Please enter a name first.' });
     return;
   }
-  const res = table.addPlayer(socket, cleanName);
+  const ident = leaderboard.resolveIdentity(cleanName, payload.claim);
+  const res = table.addPlayer(socket, cleanName, ident);
   if (res.error) {
     socket.emit('join-error', { message: res.error, tableId: id });
     socket.emit('tables', tableSummaries());
@@ -116,6 +118,15 @@ function handleJoinTable(socket, payload) {
   // seat (see handleConnection).
   socket.emit('session', { token: res.player.token });
   socket.emit('table-joined', { tableId: table.id, label: table.label, name: cleanName });
+  // Ranking status for this name; a newly issued claim is handed over once
+  // for the browser to keep.
+  socket.emit('identity', {
+    name: cleanName,
+    key: ident.key,
+    ranked: ident.rankable,
+    reason: ident.reason,
+    claim: ident.issued ? ident.secret : undefined,
+  });
   table.sendChatHistory(socket);
   table.postSystem(`${cleanName} sat down`);
   table.broadcastLobbyUpdate();

@@ -36,6 +36,30 @@
     var resultsChosen = false; // already answered the results screen
     var myName = '';
     try { myName = localStorage.getItem('omi-name') || ''; } catch (e) {}
+    var myIdentity = null;     // how the leaderboard treats our name at this table
+
+    // Ranked names are claimed by a secret this browser keeps (one per name),
+    // so nobody else can play under that name on the leaderboard. The key
+    // mirrors the server's: unsafe characters out, NFKC, lowercase.
+    function nameKey(name) {
+      var out = '';
+      Array.from(String(name || '').normalize('NFKC')).forEach(function (ch) {
+        var c = ch.codePointAt(0);
+        var unsafe = c <= 0x1f || (c >= 0x7f && c <= 0x9f) || (c >= 0x200b && c <= 0x200f) ||
+          (c >= 0x2028 && c <= 0x202e) || (c >= 0x2066 && c <= 0x2069);
+        if (!unsafe) out += ch;
+      });
+      return out.replace(/\s+/g, ' ').trim().slice(0, 64).toLowerCase();
+    }
+    function loadClaims() {
+      try { return JSON.parse(localStorage.getItem('omi-claims') || '{}') || {}; } catch (e) { return {}; }
+    }
+    function saveClaim(key, secret) {
+      var claims = loadClaims();
+      claims[key] = secret;
+      try { localStorage.setItem('omi-claims', JSON.stringify(claims)); } catch (e) {}
+    }
+
     // An invite link (?table=N) joins that table as soon as a name is set.
     var wantedTable = Number(new URLSearchParams(window.location.search).get('table')) || 0;
 
@@ -1603,10 +1627,12 @@
         $('btn-stay').disabled = resultsChosen;
         $('ov-leaderboard').style.display = state.mode === 4 ? '' : 'none';
         var r = state.results || { stayed: 0, total: 0 };
+        renderMyRecord(r.record);
         $('ov-waiting').textContent = resultsChosen
           ? 'Waiting for the others… ' + r.stayed + '/' + r.total + ' staying'
           : (r.stayed ? r.stayed + ' of ' + r.total + ' want a rematch' : '');
       } else {
+        renderMyRecord(null);
         btn.style.display = '';
         $('ov-actions').style.display = 'none';
         btn.textContent = 'READY FOR NEXT ROUND';
@@ -1618,6 +1644,49 @@
           btn.disabled = true;
           $('ov-waiting').textContent = 'Waiting for other players…';
         });
+      }
+    }
+
+    // The results screen line: "Grade A (82) · Rating 1214 (+14)".
+    function renderMyRecord(rec) {
+      var box = $('ov-record');
+      box.innerHTML = '';
+      if (!rec) { box.style.display = 'none'; return; }
+      box.style.display = 'flex';
+      var grade = document.createElement('span');
+      grade.className = 'lb-grade g-' + (rec.grade || 'x');
+      grade.textContent = rec.grade ? rec.grade + ' ' + rec.gradeScore : '-';
+      var gl = document.createElement('span');
+      gl.className = 'rec-lbl';
+      gl.textContent = 'YOUR GRADE';
+      var g = document.createElement('div');
+      g.className = 'rec-item';
+      g.appendChild(gl);
+      g.appendChild(grade);
+      box.appendChild(g);
+      var rl = document.createElement('span');
+      rl.className = 'rec-lbl';
+      rl.textContent = 'RATING';
+      var rv = document.createElement('span');
+      var rItem = document.createElement('div');
+      rItem.className = 'rec-item';
+      if (rec.rated) {
+        var d = Math.round(rec.delta * 10) / 10;
+        rv.className = 'rec-val ' + (d > 0 ? 'up' : d < 0 ? 'down' : '');
+        rv.textContent = rec.rating + ' (' + (d > 0 ? '+' : '') + d + ')';
+      } else {
+        rv.className = 'rec-val muted';
+        rv.textContent = 'not ranked';
+        rItem.title = rec.note || IDENTITY_REASONS[rec.reason] || '';
+      }
+      rItem.appendChild(rl);
+      rItem.appendChild(rv);
+      box.appendChild(rItem);
+      if (!rec.rated && (rec.note || IDENTITY_REASONS[rec.reason])) {
+        var why = document.createElement('div');
+        why.className = 'rec-why';
+        why.textContent = rec.reason === 'unrated-match' || !IDENTITY_REASONS[rec.reason] ? rec.note : IDENTITY_REASONS[rec.reason];
+        box.appendChild(why);
       }
     }
 
@@ -1678,6 +1747,14 @@
 
     function renderLobby(data) {
       $('lobby-title').textContent = (data.label || 'TABLE').toUpperCase() + ' · WAITING ROOM';
+      var rk = $('lobby-ranked');
+      if (myIdentity) {
+        rk.textContent = identityNote(myIdentity);
+        rk.className = 'lobby-ranked ' + (myIdentity.ranked ? 'yes' : 'no');
+        rk.style.display = 'block';
+      } else {
+        rk.style.display = 'none';
+      }
       var wrap = $('lobby-players');
       wrap.innerHTML = '';
 
@@ -1835,6 +1912,7 @@
     function enterTables() {
       if (currentScreen === 'game' || currentScreen === 'lobby') resetGameView();
       atTable = false;
+      myIdentity = null;
       window.OmiChat.reset();
       showScreen('tables');
       $('tables-name').textContent = myName;
@@ -1850,7 +1928,7 @@
 
     function joinTable(id) {
       $('tables-error').textContent = '';
-      socket.emit('join-table', { tableId: id, name: myName });
+      socket.emit('join-table', { tableId: id, name: myName, claim: loadClaims()[nameKey(myName)] });
     }
 
     var TABLE_STATUS = { empty: 'OPEN', open: 'OPEN', full: 'FULL', playing: 'IN PLAY', finished: 'FINISHING' };
@@ -1925,6 +2003,24 @@
       try { sessionStorage.setItem('omi-reloaded', '1'); } catch (e) {}
       window.location.reload();
     });
+
+    // Whether this name's 4-player games count, and (once) a new claim to keep.
+    socket.on('identity', function (data) {
+      if (!data) return;
+      if (data.claim && data.key) saveClaim(data.key, data.claim);
+      myIdentity = data;
+      if (!data.ranked) showToast(identityNote(data), 4500);
+    });
+
+    var IDENTITY_REASONS = {
+      generic: 'Generic names like "Player" are not ranked. Use your own name to get on the leaderboard.',
+      claimed: 'This name is ranked on another device, so your games here will not count for it.',
+      unavailable: 'The leaderboard is unavailable right now, so this game will not be ranked.',
+    };
+    function identityNote(id) {
+      return id.ranked ? 'Your 4-player games at this table count toward your rating.'
+        : (IDENTITY_REASONS[id.reason] || 'Your games here are not ranked.');
+    }
 
     socket.on('tables', function (list) {
       lastTables = list || [];
@@ -2016,7 +2112,9 @@
         disconnect: name + ' lost connection and did not come back.',
         left: name + ' left the table.',
       }[data && data.reason] || name + ' left.';
-      $('dc-msg').textContent = why + ' The game has ended.';
+      var counted = data && (data.forfeitTeam === 0 || data.forfeitTeam === 1)
+        ? ' It counts as a loss for Team ' + 'AB'[data.forfeitTeam] + '.' : '';
+      $('dc-msg').textContent = why + ' The game has ended.' + counted;
       $('dc-overlay').style.display = 'flex';
     });
 
@@ -2163,74 +2261,13 @@
       toast: function (msg) { showToast(msg, 2200); },
     });
 
-    // ---------- Leaderboard ----------
+    // ---------- Leaderboard (public/js/leaderboard.js) ----------
 
-    function fmtDate(iso) {
-      var d = new Date(iso);
-      if (isNaN(d.getTime())) return '';
-      return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-    }
-
-    function renderLeaderboard(rows) {
-      var body = $('lb-body');
-      body.innerHTML = '';
-      $('lb-empty').style.display = rows.length ? 'none' : 'block';
-      if (!rows.length) return;
-
-      var medals = { 1: '🥇', 2: '🥈', 3: '🥉' };
-      var table = document.createElement('table');
-      table.className = 'lb-table';
-      table.innerHTML = '<thead><tr>' +
-        '<th>#</th><th>TEAM</th><th class="num">SCORE</th><th>DATE</th>' +
-        '</tr></thead>';
-      var tbody = document.createElement('tbody');
-      rows.forEach(function (r, i) {
-        var tr = document.createElement('tr');
-        tr.className = 'lb-row' + (r.rank <= 3 ? ' top' + r.rank : '');
-        tr.style.animationDelay = Math.min(i * 45, 500) + 'ms'; // staggered fade-in
-        var rank = document.createElement('td');
-        rank.className = 'lb-rank';
-        rank.innerHTML = (medals[r.rank] ? '<span class="lb-medal">' + medals[r.rank] + '</span>' : '') + r.rank;
-        var team = document.createElement('td');
-        team.className = 'lb-team';
-        team.textContent = r.team;
-        var score = document.createElement('td');
-        score.className = 'lb-score num';
-        score.textContent = r.score;
-        var date = document.createElement('td');
-        date.className = 'lb-date';
-        date.textContent = fmtDate(r.date);
-        tr.appendChild(rank); tr.appendChild(team); tr.appendChild(score); tr.appendChild(date);
-        tbody.appendChild(tr);
-      });
-      table.appendChild(tbody);
-      body.appendChild(table);
-
-      var count = document.createElement('div');
-      count.className = 'lb-count';
-      count.textContent = rows.length === 1 ? '1 team on the board' : rows.length + ' teams on the board';
-      body.appendChild(count);
-    }
-
-    function openLeaderboard() {
-      $('leaderboard-overlay').style.display = 'flex';
-      $('lb-body').innerHTML = '<div class="lb-empty">Loading…</div>';
-      $('lb-empty').style.display = 'none';
-      fetch('/api/leaderboard')
-        .then(function (r) { return r.json(); })
-        .then(function (d) { renderLeaderboard((d && d.leaderboard) || []); })
-        .catch(function () { renderLeaderboard([]); });
-    }
+    function openLeaderboard() { window.OmiBoard.open(); }
 
     $('btn-leaderboard').addEventListener('click', openLeaderboard);
     $('btn-leaderboard-2').addEventListener('click', openLeaderboard);
     $('ov-leaderboard').addEventListener('click', openLeaderboard);
-    $('lb-close').addEventListener('click', function () {
-      $('leaderboard-overlay').style.display = 'none';
-    });
-    $('leaderboard-overlay').addEventListener('click', function (e) {
-      if (e.target === $('leaderboard-overlay')) $('leaderboard-overlay').style.display = 'none';
-    });
 
     // Re-lay the table when the window resizes or the device rotates
     var resizeTimer = null;

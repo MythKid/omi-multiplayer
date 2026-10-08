@@ -49,7 +49,7 @@
     #btn-info, #btn-home, .tok.pop { animation: none !important; }
     .conf { display: none !important; }
     .splash-item { animation-duration: .35s !important; }
-    .lb-row, .chat-bubble { animation: none !important; }
+    .lb-row, .lb-mcard, .chat-bubble { animation: none !important; }
   }
 
   /* ---------- Join & Lobby screens ---------- */
@@ -244,6 +244,147 @@
     from { opacity: 0; transform: translateY(8px); }
     to   { opacity: 1; transform: translateY(0); }
   }
+
+  /* Leaderboard v2: tabs, players, matches, match detail */
+  .ov-box.lb-box { max-width: 640px; }
+  .lb-table th { white-space: nowrap; }
+  .lb-rank { white-space: nowrap; }
+  .lb-tabs { display: flex; justify-content: center; gap: 6px; margin-bottom: 8px; }
+  .lb-tab {
+    font-family: 'Cinzel', serif;
+    font-size: 12px;
+    letter-spacing: 2px;
+    color: #c9a227;
+    background: none;
+    border: 1px solid rgba(201,162,39,.35);
+    border-radius: 16px;
+    padding: 6px 14px;
+  }
+  .lb-tab.on { color: #1a1a2e; background: linear-gradient(180deg, #e8c547, #c9a227); border-color: #e8c547; }
+  .lb-click { cursor: pointer; }
+  .lb-click:hover td { background: rgba(232,197,71,.08); }
+  .lb-new {
+    margin-left: 6px;
+    font-family: 'Cinzel', serif;
+    font-size: 8px;
+    letter-spacing: 1px;
+    color: #74b9ff;
+    border: 1px solid rgba(116,185,255,.5);
+    border-radius: 6px;
+    padding: 1px 4px;
+    vertical-align: middle;
+  }
+  .lb-new.lb-left { color: #ff8f8f; border-color: rgba(255,143,143,.5); }
+  .lb-delta { margin-left: 5px; font-size: 10px; font-family: 'Lora', serif; font-weight: 400; }
+  .lb-delta.up, .lb-mdelta.up, .rec-val.up { color: #7ee08a; }
+  .lb-delta.down, .lb-mdelta.down, .rec-val.down { color: #ff8f8f; }
+  .lb-wl { white-space: nowrap; color: #c8bc9c; font-size: 13px; }
+  .lb-grade {
+    display: inline-block;
+    min-width: 22px;
+    font-family: 'Cinzel', serif;
+    font-weight: 700;
+    font-size: 12px;
+    text-align: center;
+    padding: 1px 5px;
+    border-radius: 5px;
+    background: rgba(255,255,255,.08);
+    color: #c8bc9c;
+    white-space: nowrap;
+  }
+  .lb-grade.g-S { background: rgba(255,215,0,.22); color: #ffd700; }
+  .lb-grade.g-A { background: rgba(126,224,138,.18); color: #7ee08a; }
+  .lb-grade.g-B { background: rgba(116,185,255,.18); color: #74b9ff; }
+  .lb-grade.g-C { background: rgba(232,197,71,.14); color: #e8c547; }
+  .lb-grade.g-D, .lb-grade.g-E { background: rgba(255,159,128,.14); color: #ff9f80; }
+  .lb-grade.g-F { background: rgba(214,48,49,.25); color: #ff8f8f; }
+  .lb-detail td { background: rgba(0,0,0,.22); padding: 8px 10px 12px; }
+  .lb-profile { font-size: 12px; color: #9a8770; font-style: italic; margin-bottom: 8px; text-align: left; }
+  .lb-mlist { display: flex; flex-direction: column; gap: 4px; }
+  .lb-mrow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    text-align: left;
+    background: rgba(0,0,0,.25);
+    border: 1px solid rgba(201,162,39,.2);
+    border-radius: 8px;
+    color: #f0e8cc;
+    font-size: 13px;
+    padding: 6px 8px;
+  }
+  .lb-mrow:hover { border-color: rgba(232,197,71,.6); }
+  .lb-res { font-family: 'Cinzel', serif; font-weight: 700; width: 16px; text-align: center; }
+  .lb-res.w { color: #7ee08a; } .lb-res.l { color: #ff8f8f; } .lb-res.d { color: #c8bc9c; }
+  .lb-mscore { font-family: 'Cinzel', serif; min-width: 38px; color: #e8c547; }
+  .lb-who { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .lb-mdelta { font-size: 12px; white-space: nowrap; color: #9a8770; }
+  .lb-bot { color: #9a8770; font-style: italic; }
+  .lb-mcard {
+    display: block;
+    width: 100%;
+    margin-bottom: 8px;
+    background: rgba(0,0,0,.28);
+    border: 1px solid rgba(201,162,39,.3);
+    border-radius: 10px;
+    color: #f0e8cc;
+    padding: 10px 12px;
+    animation: lbRowIn .34s ease both;
+  }
+  .lb-mcard:hover { border-color: #e8c547; }
+  .lb-mteams { display: flex; align-items: center; gap: 10px; }
+  .lb-side { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 14px; min-width: 0; }
+  .lb-side.win .lb-big { color: #7ee08a; }
+  .lb-side.win .lb-teamline { font-weight: 600; }
+  .lb-big { font-family: 'Cinzel', serif; font-weight: 900; font-size: 22px; color: #e8c547; }
+  .lb-vs { font-family: 'Cinzel', serif; font-size: 11px; color: #9a8770; }
+  .lb-tlabel { font-family: 'Cinzel', serif; font-size: 9px; letter-spacing: 2px; color: #9a8770; }
+  .lb-teamline { overflow-wrap: anywhere; text-align: center; }
+  .lb-mmeta { font-size: 11px; color: #9a8770; margin-top: 6px; font-style: italic; }
+  .lb-mhead { margin-top: 6px; }
+  .lb-back {
+    display: block;
+    background: none;
+    border: none;
+    color: #e8c547;
+    font-family: 'Cinzel', serif;
+    font-size: 12px;
+    letter-spacing: 2px;
+    margin-bottom: 6px;
+  }
+  .lb-h { font-family: 'Cinzel', serif; font-size: 12px; letter-spacing: 3px; color: #c9a227; margin: 16px 0 6px; }
+  .lb-ptable { margin-top: 12px; }
+  .lb-ptable td, .lb-timeline td { font-size: 13px; padding: 6px 6px; }
+  .lb-trump { font-size: 18px; text-align: center; }
+  .lb-trump.red { color: #ff6b6b; }
+  .lb-trump.blk { color: #f0e8cc; }
+  .lb-outcome { font-size: 12px; }
+  .lb-redeal td { background: rgba(214,48,49,.08); }
+  .lb-redeal-note { font-size: 12px; font-style: italic; color: #ff9f80; }
+
+  /* Lobby: whether this name's games are ranked */
+  .lobby-ranked { font-size: 12px; font-style: italic; max-width: 340px; }
+  .lobby-ranked.yes { color: #7ee08a; }
+  .lobby-ranked.no { color: #ff9f80; }
+
+  /* Results: this player's grade and rating change */
+  .ov-record {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 18px;
+    margin: 0 0 14px;
+    padding: 10px 12px;
+    border: 1px solid rgba(201,162,39,.35);
+    border-radius: 10px;
+    background: rgba(0,0,0,.2);
+  }
+  .rec-item { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  .rec-lbl { font-family: 'Cinzel', serif; font-size: 9px; letter-spacing: 2px; color: #9a8770; }
+  .rec-item .lb-grade { font-size: 16px; padding: 2px 8px; }
+  .rec-val { font-family: 'Cinzel', serif; font-weight: 700; font-size: 16px; color: #e8c547; }
+  .rec-val.muted { color: #9a8770; font-family: 'Lora', serif; font-weight: 400; font-style: italic; font-size: 13px; }
+  .rec-why { flex-basis: 100%; font-size: 11px; color: #9a8770; font-style: italic; }
 
   /* Lobby */
   #lobby-players {
@@ -1442,6 +1583,13 @@
     }
     #lobby-ip-hint { font-size: 12px; padding: 9px 14px; }
     #lobby-ip-hint .ip { font-size: 16px; }
+  }
+
+  /* Narrow phones: the leaderboard drops its date column */
+  @media (max-width: 520px) {
+    .lb-table th, .lb-table td { padding: 6px 4px; font-size: 12px; }
+    .lb-table:not(.lb-timeline):not(.lb-ptable) th:nth-child(6), .lb-date { display: none; }
+    .lb-tab { padding: 6px 10px; letter-spacing: 1px; }
   }
 
   /* On narrow widths the 3-player top opponents (at 25% / 75%) would sit on

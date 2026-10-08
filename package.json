@@ -9,7 +9,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "test": "node test.js && node test-leaderboard.js && node test-sockets.js",
+    "test": "node test.js && node test-rating.js && node test-leaderboard.js && node test-sockets.js",
     "test:dist": "node test-dist.js",
     "build": "pkg . --targets node18-win-x64 --output omi.exe"
   },

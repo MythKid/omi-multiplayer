@@ -2,8 +2,14 @@
 // duplicate joins, invalid packets, reconnect (reclaiming a seat with a
 // session token), and lobby cleanup. Spawns a real server on a test port and
 // drives it with real socket.io clients.
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const { spawn } = require('child_process');
 const { io } = require('socket.io-client');
+
+// Test servers keep their data in a throwaway directory, never ./data.
+const DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'omi-sock-test-'));
 
 const PORT = 3991;
 const URL = 'http://127.0.0.1:' + PORT;
@@ -36,13 +42,15 @@ async function sit(tableId, name) {
   const sock = connect();
   await waitEvent(sock, 'connect');
   const sessionP = waitEvent(sock, 'session');
+  const identityP = waitEvent(sock, 'identity');
   const historyP = waitEvent(sock, 'chat-history');
   const lobbyP = waitEvent(sock, 'lobby-update');
   sock.emit('join-table', { tableId, name });
   const session = await sessionP;
+  const ident = await identityP;
   const history = await historyP;
   const lobby = await lobbyP;
-  return { sock, token: session && session.token, lobby, history };
+  return { sock, token: session && session.token, lobby, history, identity: ident };
 }
 
 let server;
@@ -51,7 +59,7 @@ function startServer(extraEnv) {
     server = spawn(process.execPath, ['server.js'], {
       cwd: __dirname,
       env: Object.assign({}, process.env, {
-        PORT: String(PORT), LOG_LEVEL: 'error', MAX_SLOTS: '3', MAX_SOCKETS: '',
+        PORT: String(PORT), LOG_LEVEL: 'error', MAX_SLOTS: '3', MAX_SOCKETS: '', DATA_DIR,
       }, extraEnv || {}),
     });
     let buf = '';
@@ -286,6 +294,24 @@ async function run() {
   const after = await unlocked;
   ok(after && after.myHand.length === 4 && after.myHandLocked === 0 && after.trump === '♠',
     'the partner hand unlocks the moment trump is called');
+
+  // Leaderboard identity and the results line.
+  ok(four[0].identity && four[0].identity.ranked && /^[A-Za-z0-9_-]{32}$/.test(four[0].identity.claim || ''),
+    'a new ranked name receives a claim to keep');
+  const generic = await sit(1, 'Player');
+  ok(generic.identity && !generic.identity.ranked && generic.identity.reason === 'generic' && !generic.identity.claim,
+    'a generic name is told it is not ranked, and gets no claim');
+  generic.sock.close();
+  four[0].sock.emit('vote-end', { action: 'propose' });
+  await wait(150);
+  four[1].sock.emit('vote-end', { action: 'agree' });
+  four[2].sock.emit('vote-end', { action: 'agree' });
+  const endP = waitFor(partnerBack, 'state-update', d => d.gameOver, 3000);
+  partnerBack.emit('vote-end', { action: 'agree' });
+  const ended = await endP;
+  const rec = ended && ended.results && ended.results.record;
+  ok(rec && rec.rated === false && rec.reason === 'unrated-match' && rec.grade,
+    'an early vote end shows a grade but no rating change, with the reason');
   partnerBack.close();
   four.forEach(p => p.sock.close());
   await wait(300);
@@ -319,5 +345,8 @@ run()
   .catch((e) => { failures++; console.log('  ERROR ' + e.message); })
   .then(() => {
     if (server) try { server.kill(); } catch (e) {}
-    setTimeout(() => process.exit(failures === 0 ? 0 : 1), 300);
+    setTimeout(() => {
+      try { fs.rmSync(DATA_DIR, { recursive: true, force: true }); } catch (e) {}
+      process.exit(failures === 0 ? 0 : 1);
+    }, 300);
   });

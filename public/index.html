@@ -60,6 +60,7 @@
     <div class="logo">OMI</div>
     <div class="deco"></div>
     <div class="lbl" id="lobby-title">WAITING ROOM</div>
+    <div id="lobby-ranked" class="lobby-ranked" style="display:none"></div>
     <div id="lobby-players"></div>
     <div id="lobby-teams" style="display:none">
       <div class="lbl" style="margin-bottom:8px">TEAMS</div>
@@ -138,6 +139,7 @@
         <tbody id="ov-tbody"></tbody>
       </table>
       <div id="ov-note" class="ov-note"></div>
+      <div id="ov-record" class="ov-record" style="display:none"></div>
       <button id="btn-ready" class="ov-btn-pri">READY FOR NEXT ROUND</button>
       <div id="ov-actions" class="ov-actions" style="display:none">
         <button id="btn-stay" class="ov-btn-pri">BACK TO TABLE</button>
@@ -231,16 +233,17 @@
     </div>
   </div>
 
-  <!-- OVERLAY: Leaderboard -->
+  <!-- OVERLAY: Leaderboard (public/js/leaderboard.js) -->
   <div id="leaderboard-overlay" style="display:none" role="dialog" aria-modal="true" aria-label="Leaderboard">
     <div class="ov-box lb-box">
       <button id="lb-close" aria-label="Close">×</button>
       <div class="ov-title">🏆 LEADERBOARD</div>
-      <div class="lb-sub">Top teams by highest score</div>
-      <div id="lb-body"></div>
-      <div id="lb-empty" class="lb-empty" style="display:none">
-        No games recorded yet. Win a 4-player match to claim the top spot.
+      <div class="lb-tabs" role="tablist">
+        <button class="lb-tab on" type="button" role="tab" aria-selected="true" data-tab="players">PLAYERS</button>
+        <button class="lb-tab" type="button" role="tab" aria-selected="false" data-tab="matches">RECENT MATCHES</button>
       </div>
+      <div class="lb-sub" id="lb-sub"></div>
+      <div id="lb-body"></div>
     </div>
   </div>
 
@@ -285,6 +288,7 @@
 
   <script src="/socket.io.min.js"></script>
   <script src="/js/chat.js"></script>
+  <script src="/js/leaderboard.js"></script>
   <script src="/js/app.js"></script>
 </body>
 </html>

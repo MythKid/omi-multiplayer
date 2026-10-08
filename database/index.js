@@ -1,7 +1,8 @@
 // Database access point. Picks a storage backend and hands back one object
-// with a stable interface: submit(team, score, date), top(limit), close().
-// The rest of the app never imports a concrete store directly, so replacing
-// SQLite with Postgres later is a change confined to this folder.
+// with a stable interface: getPlayer, recordMatch, topPlayers, playerMatches,
+// recentMatches, getMatch, countLineupSince, counts and close. The rest of
+// the app never imports a concrete store directly, so replacing SQLite with
+// Postgres later is a change confined to this folder.
 const fs = require('fs');
 const path = require('path');
 const config = require('../config');
@@ -28,7 +29,8 @@ function createStore() {
     }
   }
 
-  const s = new JsonStore(path.join(config.dataDir, 'leaderboard.json'));
+  // A new file: the old best-score leaderboard.json is left as it was.
+  const s = new JsonStore(path.join(config.dataDir, 'leaderboard-v2.json'));
   logger.info('Leaderboard storage: JSON file');
   return s;
 }

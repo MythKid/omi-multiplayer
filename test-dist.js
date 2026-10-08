@@ -24,13 +24,13 @@ console.log('[1] Files a fresh clone must contain');
 // ---------------------------------------------------------------------------
 const REQUIRED = [
   'package.json', 'package-lock.json', 'server.js', 'game.js', 'test.js',
-  'test-dist.js', 'test-leaderboard.js', 'test-sockets.js',
+  'test-dist.js', 'test-leaderboard.js', 'test-rating.js', 'test-sockets.js',
   'README.md', 'LICENSE', '.gitignore', '.env.example',
   'config/index.js', 'utils/logger.js', 'utils/network.js', 'utils/sanitize.js',
   'database/index.js', 'database/sqliteStore.js', 'database/jsonStore.js',
   'services/gameManager.js', 'services/table.js', 'services/chat.js',
-  'services/leaderboardService.js', 'routes/api.js',
-  'public/index.html', 'public/js/chat.js', 'public/socket.io.min.js',
+  'services/leaderboardService.js', 'services/rating.js', 'services/identity.js', 'routes/api.js',
+  'public/index.html', 'public/js/chat.js', 'public/js/leaderboard.js', 'public/socket.io.min.js',
   'public/css/styles.css', 'public/js/app.js',
   'public/manifest.webmanifest', 'public/sw.js', 'public/favicon.ico',
   'public/icons/icon.svg', 'public/icons/icon-maskable.svg', 'public/icons/favicon.svg',
@@ -103,17 +103,17 @@ if (serverVer) ok(clientVer === serverVer, 'client socket.io ' + clientVer + ' m
 console.log('\n[4] Source integrity');
 // ---------------------------------------------------------------------------
 [
-  'server.js', 'game.js', 'test.js', 'test-dist.js', 'test-leaderboard.js', 'test-sockets.js',
-  'config/index.js', 'utils/logger.js', 'utils/network.js', 'utils/sanitize.js',
+  'server.js', 'game.js', 'test.js', 'test-dist.js', 'test-leaderboard.js', 'test-rating.js',
+  'test-sockets.js', 'config/index.js', 'utils/logger.js', 'utils/network.js', 'utils/sanitize.js',
   'database/index.js', 'database/jsonStore.js', 'database/sqliteStore.js',
   'services/gameManager.js', 'services/table.js', 'services/chat.js',
-  'services/leaderboardService.js', 'routes/api.js',
+  'services/leaderboardService.js', 'services/rating.js', 'services/identity.js', 'routes/api.js',
 ].forEach(f => {
   const r = spawnSync(process.execPath, ['--check', path.join(ROOT, f)], { encoding: 'utf8' });
   ok(r.status === 0, 'parses without syntax errors: ' + f);
 });
 // The client scripts live in their own files; they must parse too.
-['public/js/app.js', 'public/js/chat.js'].forEach(f => {
+['public/js/app.js', 'public/js/chat.js', 'public/js/leaderboard.js'].forEach(f => {
   let parses = false;
   try { new Function(read(f)); parses = true; } catch (e) {}
   ok(parses, 'client script (' + f + ') parses');
@@ -129,7 +129,8 @@ const SHIPPED = [
   'server.js', 'game.js', 'test.js', 'public/index.html', 'public/js/app.js',
   'public/css/styles.css', 'README.md', 'package.json',
   'services/gameManager.js', 'services/table.js', 'services/chat.js', 'services/leaderboardService.js',
-  'public/sw.js', 'public/js/chat.js', 'routes/api.js', 'config/index.js',
+  'services/rating.js', 'services/identity.js', 'database/sqliteStore.js', 'database/jsonStore.js',
+  'public/sw.js', 'public/js/chat.js', 'public/js/leaderboard.js', 'routes/api.js', 'config/index.js',
 ];
 SHIPPED.forEach(f => ok(!/[—–]/.test(read(f)), 'no em/en dashes in ' + f));
 SHIPPED.forEach(f => ok(!/\b(anthropic|claude)\b/i.test(read(f)), 'no AI-tool signatures in ' + f));
@@ -161,11 +162,13 @@ function waitFor(regex, stream, timeoutMs) {
 }
 
 const TEST_PORT = 3999;
+const SMOKE_DATA = fs.mkdtempSync(path.join(require('os').tmpdir(), 'omi-dist-test-'));
 let server;
 
 async function runSmoke() {
   server = spawn(process.execPath, ['server.js'], {
-    cwd: ROOT, env: Object.assign({}, process.env, { PORT: String(TEST_PORT) }),
+    // A throwaway data directory, so the smoke test never touches ./data.
+    cwd: ROOT, env: Object.assign({}, process.env, { PORT: String(TEST_PORT), DATA_DIR: SMOKE_DATA }),
   });
   const ready = await waitFor(/running|listening/i, server.stdout, 8000);
   ok(ready, 'server starts and reports it is running');
@@ -215,8 +218,27 @@ async function runSmoke() {
 
   const stats = await request('/api/stats');
   let statsOk = false;
-  try { statsOk = stats.status === 200 && typeof JSON.parse(stats.body).teams === 'number'; } catch (e) {}
+  try {
+    const st = JSON.parse(stats.body);
+    statsOk = stats.status === 200 && typeof st.players === 'number' && typeof st.matches === 'number' &&
+      typeof st.tables === 'number';
+  } catch (e) {}
   ok(statsOk, 'GET /api/stats returns aggregate stats');
+
+  const recent = await request('/api/matches?limit=5');
+  let recentOk = false;
+  try { recentOk = recent.status === 200 && Array.isArray(JSON.parse(recent.body).matches); } catch (e) {}
+  ok(recentOk, 'GET /api/matches returns a matches array');
+
+  const history = await request('/api/players/' + encodeURIComponent('Some One') + '/matches');
+  let historyOk = false;
+  try { historyOk = history.status === 200 && Array.isArray(JSON.parse(history.body).matches); } catch (e) {}
+  ok(historyOk, 'GET /api/players/:name/matches returns a history');
+
+  const badId = await request('/api/matches/not-a-number');
+  ok(badId.status === 400, 'GET /api/matches/:id rejects a malformed id (400)');
+  const noMatch = await request('/api/matches/987654321');
+  ok(noMatch.status === 404, 'GET /api/matches/:id returns 404 for an unknown match');
 
   // PWA assets are served.
   const manifest = await request('/manifest.webmanifest');
@@ -266,6 +288,7 @@ runSmoke()
   .then(() => {
     if (server) try { server.kill(); } catch (e) {}
     setTimeout(() => {
+      try { fs.rmSync(SMOKE_DATA, { recursive: true, force: true }); } catch (e) {}
       console.log('\n' + (failures === 0
         ? 'ALL ' + checks + ' DISTRIBUTION CHECKS PASSED'
         : failures + ' of ' + checks + ' CHECKS FAILED'));

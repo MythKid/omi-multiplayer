@@ -683,6 +683,7 @@ function endMatchByVote(gs) {
 
   gs.gameOver = true;
   gs.gameWinner = winner;
+  gs.endedByVote = true;
   gs.roundNote = winner
     ? 'Match ended by agreement. Highest score wins'
     : 'Match ended by agreement. Scores level, so it is a draw';

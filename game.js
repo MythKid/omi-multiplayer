@@ -12,7 +12,8 @@ const IS_RED = { '♥': true, '♦': true, '♠': false, '♣': false };
 const RANKS = ['7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
 const RV = { '7': 0, '8': 1, '9': 2, '10': 3, 'J': 4, 'Q': 5, 'K': 6, 'A': 7 };
 
-const AI_NAMES = ['Kamal', 'Nimal', 'Sunil'];
+// Bots take the first of these not already used by a human at the table.
+const AI_NAMES = ['Kamal', 'Nimal', 'Sunil', 'Ruwan', 'Saman', 'Amal', 'Chathura'];
 
 // ---------- Helpers ----------
 
@@ -112,6 +113,8 @@ function startRound4(gs) {
   gs.trumpCallerSeat = (gs.dealer + 1) % 4;
   gs.breakerSeat = (gs.dealer + 3) % 4;
   gs.kapothiTeam = -1;
+  gs.redealsThisRound = 0;
+  gs.redealInfo = null;
   gs.wonStacks = [];
   gs.players.forEach(p => { p.hand = []; });
   gs.phase = 'shuffle';
@@ -122,11 +125,13 @@ function startRound4(gs) {
 
 function createGame(lobbyPlayers, mode, initialDeck) {
   const players = [];
+  const taken = new Set(lobbyPlayers.map(p => String(p.name).toLowerCase()));
+  const botNames = AI_NAMES.filter(n => !taken.has(n.toLowerCase()));
   let aiIdx = 0;
   for (let seat = 0; seat < mode; seat++) {
     const human = lobbyPlayers.find(p => p.seat === seat);
     players.push({
-      name: human ? human.name : AI_NAMES[aiIdx++],
+      name: human ? human.name : botNames[aiIdx++],
       seat,
       team: mode === 4 ? seat % 2 : seat,
       isAI: !human,
@@ -166,6 +171,9 @@ function createGame(lobbyPlayers, mode, initialDeck) {
     gameWinner: null,
     readyCount: 0,
     lastEvent: '',
+    redealsThisRound: 0, // 4p: hands thrown in this round for a trump shortage
+    redealInfo: null,    // { counts, shortTeam, n } while a redeal is pending
+    history: [],         // 4p: one entry per scored round or redeal, for match records
   };
 
   if (mode === 4) {
@@ -300,16 +308,83 @@ function dealStage1(gs) {
   gs.currentSeat = gs.trumpCallerSeat;
 }
 
+// Trumps held by each team, [team A, team B].
+function teamTrumpCounts(gs) {
+  const counts = [0, 0];
+  gs.players.forEach(p => {
+    counts[p.team] += p.hand.filter(c => c.s === gs.trump).length;
+  });
+  return counts;
+}
+
+// Keep the match log bounded however long a game runs.
+function logHistory(gs, entry) {
+  gs.history.push(entry);
+  if (gs.history.length > 200) gs.history.shift();
+}
+
 // Second packet after the trump lock: hands finalise at 8, caller leads.
+// If either team holds fewer than 2 trumps between its two players the hand
+// cannot be played: it is thrown in and redealt (see redealRound).
 function dealStage2(gs) {
   for (let k = 0; k < 4; k++) {
     const seat = (gs.trumpCallerSeat + k) % 4;
     for (let c = 0; c < 4; c++) gs.players[seat].hand.push(gs.deck.shift());
     sortHand(gs.players[seat].hand);
   }
+  gs.leadSuit = null;
+
+  const counts = teamTrumpCounts(gs);
+  const shortTeam = counts[0] < 2 ? 0 : counts[1] < 2 ? 1 : -1;
+  if (shortTeam !== -1) {
+    gs.redealsThisRound++;
+    gs.redealInfo = { counts, shortTeam, n: gs.redealsThisRound };
+    logHistory(gs, {
+      type: 'redeal',
+      round: gs.roundNum,
+      dealer: gs.dealer,
+      callerSeat: gs.trumpCallerSeat,
+      trump: gs.trump,
+      counts: counts.slice(),
+      shortTeam,
+    });
+    const n = counts[shortTeam];
+    gs.phase = 'redeal'; // server calls redealRound() after a beat
+    gs.currentSeat = gs.dealer;
+    gs.lastEvent = `Redeal! Team ${'AB'[shortTeam]} holds only ${n} trump${n === 1 ? '' : 's'}`;
+    return;
+  }
+
   gs.phase = 'play';
   gs.currentSeat = gs.trumpCallerSeat;
+}
+
+// Throw the hand in after a trump shortage. The dealer gathers the hands in
+// deal order (trump caller first), each dropped on top of the pile, and the
+// same 32 cards become the deck again. The round does not advance: the same
+// dealer reshuffles, the same breaker cuts and the same caller names trump.
+function redealRound(gs) {
+  if (gs.mode !== 4 || gs.phase !== 'redeal') throw new Error('No redeal pending');
+  const bottomUp = [];
+  for (let k = 0; k < 4; k++) {
+    const p = gs.players[(gs.trumpCallerSeat + k) % 4];
+    p.hand.forEach(c => bottomUp.push(c));
+    p.hand = [];
+  }
+  gs.deck = bottomUp.reverse().concat(gs.deck); // deck[0] is the top
+
+  gs.players.forEach(p => { p.tricks = 0; });
+  gs.trump = null;
   gs.leadSuit = null;
+  gs.trick = [];
+  gs.tricksPlayed = 0;
+  gs.trickJustEnded = false;
+  gs.kapothiTeam = -1;
+  gs.wonStacks = [];
+  gs.redealInfo = null;
+  gs.phase = 'shuffle';
+  gs.currentSeat = gs.dealer;
+  gs.lastEvent = `${gs.players[gs.dealer].name} gathers the cards to reshuffle`;
 }
 
 function chooseTrump(gs, suit) {
@@ -335,6 +410,7 @@ function legalCards(gs, seat) {
 }
 
 function playCard(gs, seat, cardIndex) {
+  if (gs.phase !== 'play') throw new Error('Not in play phase');
   if (gs.trickJustEnded || gs.trick.length >= gs.mode) {
     throw new Error('Trick already complete'); // waiting for endTrick()
   }
@@ -461,6 +537,7 @@ function aiDecideKapothi(gs, seat) {
 function endRound(gs) {
   const deltas = gs.players.map(() => 0);
   let note = '';
+  let roundLog = null; // 4p match record entry
 
   if (gs.mode === 4) {
     const callerTeam = gs.players[gs.trumpCallerSeat].team;
@@ -473,25 +550,28 @@ function endRound(gs) {
 
     let points = 0;
     let scoringTeam = -1;
+    let outcome;
+    let bonusPaid = 0;
     if (sweepTeam !== -1 && gs.kapothiTeam === sweepTeam) {
-      points = 3; scoringTeam = sweepTeam;
+      points = 3; scoringTeam = sweepTeam; outcome = 'kapothi-made';
       note = `KAPOTHI! ${teamName(sweepTeam)} announced and swept all 8 for +3`;
     } else if (gs.kapothiTeam !== -1) {
       // Announced but dropped one of the last two tricks
-      points = 4; scoringTeam = 1 - gs.kapothiTeam;
+      points = 4; scoringTeam = 1 - gs.kapothiTeam; outcome = 'kapothi-broken';
       note = `Kapothi broken! ${teamName(scoringTeam)} snatch a trick for +4`;
     } else if (ct >= 5) {
-      points = 1; scoringTeam = callerTeam;
+      points = 1; scoringTeam = callerTeam; outcome = 'call-made';
       note = ct === 8
         ? `${callerName} swept all 8 unannounced, only +1`
         : `${callerName} made their call with ${ct} tricks, +1`;
     } else if (ct === 4) {
       gs.drawBonus++;
+      outcome = 'draw';
       note = gs.drawBonus > 1
         ? `Drawn again. ${gs.drawBonus} bonus tokens now wait for the next winners`
         : 'Drawn 4 each. A bonus token waits for the next winners';
     } else {
-      points = 2; scoringTeam = 1 - callerTeam;
+      points = 2; scoringTeam = 1 - callerTeam; outcome = 'call-broken';
       note = dt === 8
         ? `${defenderName} swept all 8 unannounced, +2`
         : `${defenderName} broke the call with ${dt} tricks, +2`;
@@ -500,11 +580,26 @@ function endRound(gs) {
     if (scoringTeam !== -1 && gs.drawBonus > 0) {
       note += ` (+${gs.drawBonus} carried token${gs.drawBonus > 1 ? 's' : ''})`;
       points += gs.drawBonus;
+      bonusPaid = gs.drawBonus;
       gs.drawBonus = 0;
     }
     gs.players.forEach((p, i) => {
       deltas[i] = p.team === scoringTeam ? points : 0;
     });
+    roundLog = {
+      type: 'round',
+      round: gs.roundNum,
+      dealer: gs.dealer,
+      callerSeat: gs.trumpCallerSeat,
+      trump: gs.trump,
+      tricksBySeat: gs.players.map(p => p.tricks),
+      outcome,
+      scoringTeam,
+      points,
+      kapothiTeam: gs.kapothiTeam,
+      bonusPaid,
+      note,
+    };
 
     // The winner of each trick stacked it face-down; now the sub-stacks
     // pile up in the order they were won and become next round's deck.
@@ -535,6 +630,10 @@ function endRound(gs) {
   }
 
   gs.players.forEach((p, i) => { p.score += deltas[i]; });
+  if (roundLog) {
+    roundLog.scoreAfter = [0, 1].map(t => gs.players.find(p => p.team === t).score);
+    logHistory(gs, roundLog);
+  }
 
   gs.roundDeltas = gs.players.map((p, i) => ({
     seat: i,
@@ -587,6 +686,7 @@ function endMatchByVote(gs) {
 
   gs.gameOver = true;
   gs.gameWinner = winner;
+  gs.endedByVote = true;
   gs.roundNote = winner
     ? 'Match ended by agreement. Highest score wins'
     : 'Match ended by agreement. Scores level, so it is a draw';
@@ -704,6 +804,8 @@ module.exports = {
   endMatchByVote,
   dealStage1,
   dealStage2,
+  teamTrumpCounts,
+  redealRound,
   chooseTrump,
   decideKapothi,
   aiDecideKapothi,

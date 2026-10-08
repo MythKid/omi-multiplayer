@@ -1,6 +1,6 @@
 {
   "name": "omi",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Sri Lankan Omi card game for local network multiplayer",
   "author": "Methindu Damsara (https://nodenull.org)",
   "license": "SEE LICENSE IN LICENSE",
@@ -9,7 +9,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "test": "node test.js && node test-leaderboard.js && node test-sockets.js",
+    "test": "node test.js && node test-rating.js && node test-leaderboard.js && node test-sockets.js",
     "test:dist": "node test-dist.js",
     "build": "pkg . --targets node18-win-x64 --output omi.exe"
   },

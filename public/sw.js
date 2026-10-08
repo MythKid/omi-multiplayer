@@ -1,12 +1,15 @@
-// Service worker: makes OMI installable and fast to load. It precaches the
-// app shell and serves static assets from cache, but never touches the API or
-// the Socket.IO connection, which must always go straight to the network.
-const CACHE = 'omi-v2';
+// Service worker: makes OMI installable and lets it open offline. It
+// precaches the app shell, but always prefers the network for it: the client
+// must match the server it talks to, so a stale cached script is only ever a
+// fallback. The API and the Socket.IO connection are never touched.
+const CACHE = 'omi-v3';
 const SHELL = [
   '/',
   '/index.html',
   '/css/styles.css',
   '/js/app.js',
+  '/js/chat.js',
+  '/js/leaderboard.js',
   '/socket.io.min.js',
   '/manifest.webmanifest',
   '/favicon.ico',
@@ -52,17 +55,14 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Static assets: serve from cache, refresh in the background.
+  // Static assets: network first (keeping the cache fresh), cache when offline.
   event.respondWith(
-    caches.match(req).then((cached) => {
-      const network = fetch(req).then((res) => {
-        if (res && res.status === 200) {
-          const copy = res.clone();
-          caches.open(CACHE).then((cache) => cache.put(req, copy));
-        }
-        return res;
-      }).catch(() => cached);
-      return cached || network;
-    })
+    fetch(req).then((res) => {
+      if (res && res.status === 200) {
+        const copy = res.clone();
+        caches.open(CACHE).then((cache) => cache.put(req, copy));
+      }
+      return res;
+    }).catch(() => caches.match(req))
   );
 });

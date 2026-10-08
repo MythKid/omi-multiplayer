@@ -27,4 +27,11 @@ function sanitizeName(name, maxLength) {
     .slice(0, maxLength || 32);
 }
 
-module.exports = { sanitizeName };
+// Canonical identity for a display name: compatibility-normalised, case-folded
+// and whitespace-collapsed, so "Kamal", "KAMAL" and a full-width lookalike all
+// map to the same key.
+function nameKey(name) {
+  return sanitizeName(String(name || '').normalize('NFKC'), 64).toLowerCase();
+}
+
+module.exports = { sanitizeName, stripUnsafe, nameKey };

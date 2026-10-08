@@ -37,17 +37,30 @@
     <div class="logo-sub">The Sri Lankan Card Game</div>
     <div class="deco"></div>
     <div class="lbl">YOUR NAME</div>
-    <input id="input-name" type="text" maxlength="14" placeholder="Enter your name…" value="Player">
-    <button id="btn-join">JOIN GAME</button>
+    <input id="input-name" type="text" maxlength="14" placeholder="Enter your name…" autocomplete="nickname">
+    <button id="btn-join">CONTINUE</button>
     <button id="btn-leaderboard" class="btn-secondary">🏆 LEADERBOARD</button>
     <div id="join-error" class="error-msg"></div>
   </div>
 
-  <!-- SCREEN 2: LOBBY -->
+  <!-- SCREEN 2: TABLES -->
+  <div id="screen-tables" style="display:none">
+    <div class="logo logo-sm">OMI</div>
+    <div class="deco"></div>
+    <div class="lbl">CHOOSE A TABLE</div>
+    <div class="tables-me">Playing as <b id="tables-name"></b> · <button id="btn-change-name" class="link-btn">change</button></div>
+    <div id="tables-list" role="list"></div>
+    <div id="tables-error" class="error-msg" role="alert"></div>
+    <div class="tables-hint">A table locks once its game starts. Pick an open one, or wait for a table to finish.</div>
+    <button id="btn-leaderboard-2" class="btn-secondary">🏆 LEADERBOARD</button>
+  </div>
+
+  <!-- SCREEN 3: LOBBY -->
   <div id="screen-lobby" style="display:none">
     <div class="logo">OMI</div>
     <div class="deco"></div>
-    <div class="lbl">WAITING ROOM</div>
+    <div class="lbl" id="lobby-title">WAITING ROOM</div>
+    <div id="lobby-ranked" class="lobby-ranked" style="display:none"></div>
     <div id="lobby-players"></div>
     <div id="lobby-teams" style="display:none">
       <div class="lbl" style="margin-bottom:8px">TEAMS</div>
@@ -68,9 +81,10 @@
       <p>Waiting for host to start the game…</p>
     </div>
     <div id="lobby-ip-hint" style="display:none"></div>
+    <button id="btn-leave-table" class="btn-secondary">LEAVE TABLE</button>
   </div>
 
-  <!-- SCREEN 3: GAME -->
+  <!-- SCREEN 4: GAME -->
   <div id="screen-game" style="display:none">
     <div id="table">
       <div id="pS"  class="pzone"></div>
@@ -125,7 +139,13 @@
         <tbody id="ov-tbody"></tbody>
       </table>
       <div id="ov-note" class="ov-note"></div>
+      <div id="ov-record" class="ov-record" style="display:none"></div>
       <button id="btn-ready" class="ov-btn-pri">READY FOR NEXT ROUND</button>
+      <div id="ov-actions" class="ov-actions" style="display:none">
+        <button id="btn-stay" class="ov-btn-pri">BACK TO TABLE</button>
+        <button id="btn-leave-results" class="btn-secondary">LEAVE TABLE</button>
+        <button id="ov-leaderboard" class="btn-secondary">🏆 VIEW LEADERBOARD</button>
+      </div>
       <div id="ov-waiting" class="ov-wait"></div>
     </div>
   </div>
@@ -141,12 +161,29 @@
       <button id="info-close" aria-label="Close">×</button>
       <div class="ov-title">HOW TO PLAY OMI</div>
 
+      <div class="info-new">
+        <div class="info-h">WHAT'S NEW IN 2.0</div>
+        <ul>
+          <li><b>Tables:</b> several games run at once. Pick an open table, invite friends to it, and stay for a rematch.</li>
+          <li><b>Chat</b> with your table (💬), without ever covering your cards.</li>
+          <li><b>Partner waits:</b> the trump caller's partner sees no cards until trumps are called.</li>
+          <li><b>Redeal:</b> a team with fewer than 2 trumps between them means the hand is thrown in and redealt.</li>
+          <li><b>Rated leaderboard:</b> player ratings, a grade for every match, and the full story of each game.</li>
+        </ul>
+      </div>
+
       <div class="info-h">WHAT IS THIS GAME?</div>
       <p>Omi is Sri Lanka's favourite card game. Four players make two teams,
       and you partner with the player sitting across the table. Before the
       game starts, the host can change who partners with whom in the lobby.
       The game uses 32 cards: only Ace, King, Queen, Jack, 10, 9, 8 and 7 of
       each suit. Cards rank from Ace (best) down to 7 (worst).</p>
+
+      <div class="info-h">TABLES</div>
+      <p>Several games run at once, each at its own table. After entering your
+      name, pick an open table (or use a friend's table invite link). A table
+      locks as soon as its game starts, so pick another one or wait for it to
+      finish. When a match ends you can stay at the table for a rematch.</p>
 
       <div class="info-h">THE DECK IS REAL</div>
       <p>There is one deck and it never gets magically reset. Cards collected
@@ -160,10 +197,16 @@
         <li><b>Shuffle:</b> chop packets off the deck (click it) or riffle it, as many times as you like.</li>
         <li><b>Cut:</b> the player to the dealer's left slices the stack and restacks it.</li>
         <li><b>First 4 cards:</b> everyone gets 4 cards, starting with the player to the dealer's right.</li>
-        <li><b>Call trump:</b> that same player looks at their 4 cards and picks the trump suit.</li>
+        <li><b>Call trump:</b> that same player looks at their 4 cards and picks the trump suit.
+        Their <b>partner must wait</b>: their cards stay hidden under a red cross until
+        trump is called. The other team can look at their 4 cards.</li>
         <li><b>Last 4 cards:</b> everyone gets 4 more. Now you hold 8.</li>
         <li><b>Play 8 tricks:</b> the trump caller leads the first trick. Play goes counter-clockwise.</li>
       </ul>
+      <p><b>Redeal:</b> if either team holds fewer than 2 trumps between its two
+      players, the hand cannot be played. The cards are thrown in, nobody scores,
+      and the same dealer reshuffles, the same player cuts and the same player
+      calls trump again.</p>
 
       <div class="info-h">PLAYING A TRICK</div>
       <p>Each player throws one card. You <b>must follow the suit</b> of the
@@ -193,6 +236,19 @@
       player agrees, the match stops and whoever has the most tokens wins.
       One "no" and the game carries on.</p>
 
+      <div class="info-h">CHAT</div>
+      <p>Tap 💬 to talk to your table. Everyone at the table sees every message
+      (there is no private team chat), and new messages pop up next to the
+      player who sent them. Tap a name in the chat to mute that player.</p>
+
+      <div class="info-h">LEADERBOARD</div>
+      <p>Every 4-player match is graded (S, A, B, C, D, E) on the result, your
+      team's tokens, your tricks, the calls you made and the calls your team
+      broke. Players are ranked by a rating that rises when you beat strong
+      opponents and falls when you lose. Use your own name: generic names like
+      "Player" are not ranked, and your name stays yours on this browser.
+      Leaving a match after two rounds counts as a loss.</p>
+
       <div class="info-h">2 &amp; 3 PLAYER MODES</div>
       <p><b>2 players:</b> 8 cards each plus a draw pile. The pile's top card
       sets trump, and after each trick both players draw a fresh card. Best of
@@ -209,29 +265,31 @@
       <div class="info-credit">
         Notes created by <b>Methindu Damsara</b> |
         <a href="https://nodenull.org" target="_blank" rel="noopener noreferrer">nodenull.org</a>
+        <div class="info-version">OMI <span id="app-version">v2.0.0</span></div>
       </div>
     </div>
   </div>
 
-  <!-- OVERLAY: Leaderboard -->
+  <!-- OVERLAY: Leaderboard (public/js/leaderboard.js) -->
   <div id="leaderboard-overlay" style="display:none" role="dialog" aria-modal="true" aria-label="Leaderboard">
     <div class="ov-box lb-box">
       <button id="lb-close" aria-label="Close">×</button>
       <div class="ov-title">🏆 LEADERBOARD</div>
-      <div class="lb-sub">Top teams by highest score</div>
-      <div id="lb-body"></div>
-      <div id="lb-empty" class="lb-empty" style="display:none">
-        No games recorded yet. Win a 4-player match to claim the top spot.
+      <div class="lb-tabs" role="tablist">
+        <button class="lb-tab on" type="button" role="tab" aria-selected="true" data-tab="players">PLAYERS</button>
+        <button class="lb-tab" type="button" role="tab" aria-selected="false" data-tab="matches">RECENT MATCHES</button>
       </div>
+      <div class="lb-sub" id="lb-sub"></div>
+      <div id="lb-body"></div>
     </div>
   </div>
 
-  <!-- OVERLAY: Disconnection -->
-  <div id="dc-overlay" style="display:none">
+  <!-- OVERLAY: Game ended because a player left -->
+  <div id="dc-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="dc-title">
     <div class="ov-box">
-      <div class="ov-title">⚠ Player Disconnected</div>
+      <div class="ov-title" id="dc-title">⚠ Game Ended</div>
       <div id="dc-msg" class="ov-note"></div>
-      <button id="btn-back-lobby">BACK TO LOBBY</button>
+      <button id="btn-back-lobby">BACK TO TABLE</button>
     </div>
   </div>
 
@@ -239,16 +297,36 @@
   <div id="home-confirm-overlay" style="display:none" role="dialog" aria-modal="true" aria-label="Leave game">
     <div class="ov-box">
       <div class="ov-title">NodeNull</div>
-      <div class="ov-note">Abandon the current game and return to the home page?</div>
+      <div class="ov-note">Leave your table and return to the home page? A game in progress ends
+      for everyone, and after two rounds it counts as a loss for your team.</div>
       <button id="btn-home-leave" class="ov-btn-pri">LEAVE GAME</button>
       <button id="btn-home-stay" class="btn-secondary" style="margin-top:10px">STAY IN GAME</button>
     </div>
   </div>
 
+  <!-- Table chat: a toggle button and a non-modal panel (public/js/chat.js) -->
+  <button id="btn-chat" type="button" aria-label="Open chat" aria-expanded="false" aria-controls="chat-panel" style="display:none">💬<span id="chat-unread" class="chat-unread" style="display:none"></span></button>
+  <section id="chat-panel" aria-label="Table chat" style="display:none">
+    <div class="chat-head">
+      <span class="chat-title">TABLE CHAT</span>
+      <button id="chat-sound" type="button" class="chat-icon" aria-pressed="true">🔔</button>
+      <button id="chat-close" type="button" class="chat-icon" aria-label="Close chat">×</button>
+    </div>
+    <div id="chat-log" role="log" aria-live="polite" aria-relevant="additions"></div>
+    <div id="chat-quick"></div>
+    <form id="chat-form" autocomplete="off">
+      <input id="chat-input" type="text" maxlength="200" placeholder="Say something to the table…" enterkeyhint="send" aria-label="Chat message">
+      <button id="chat-send" type="submit">SEND</button>
+    </form>
+    <div class="chat-foot">Everyone at this table sees these messages. Tap a name to mute it.</div>
+  </section>
+
   <!-- Banner shown while waiting for a dropped player to reconnect -->
   <div id="reconnect-banner" role="status" aria-live="polite" style="display:none"></div>
 
   <script src="/socket.io.min.js"></script>
+  <script src="/js/chat.js"></script>
+  <script src="/js/leaderboard.js"></script>
   <script src="/js/app.js"></script>
 </body>
 </html>

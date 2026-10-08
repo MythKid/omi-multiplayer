@@ -41,11 +41,6 @@ function init(ioInstance) {
   reaper.unref();
 }
 
-function setTableQR(id, dataUrl) {
-  const table = tables[id - 1];
-  if (table) table.joinQR = dataUrl;
-}
-
 function tableIds() {
   return tables.map(t => t.id);
 }
@@ -244,7 +239,6 @@ function handleConnection(socket) {
 module.exports = {
   PROTOCOL_VERSION,
   init,
-  setTableQR,
   tableIds,
   tableSummaries,
   handleConnection,

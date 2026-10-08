@@ -4,6 +4,27 @@ All notable changes to OMI are listed here, newest first. Versions follow
 [Semantic Versioning](https://semver.org): a major version changes the client/server
 protocol or stored data, a minor version adds features, a patch fixes bugs.
 
+## 2.0.1 (2026-10-09)
+
+### Fixes
+
+- **Invite links and QR codes on the hosted site now work.** On omi.nodenull.org a
+  table's invite pointed at the server's private internal address, so friends who
+  scanned the code or opened the link could not reach the game. The invite now uses
+  the address players actually came in on (for example
+  `https://omi.nodenull.org/?table=2`), even when `PUBLIC_URL` is not set. Hosting at
+  home still shares the Wi-Fi address.
+- Online, the lobby now says "or share this link" instead of "open this on the same
+  Wi-Fi", and the `.local` alternative link is only offered on a home network.
+- On a home network the server now accepts its own `.local` name, so that alternative
+  link actually opens the game instead of being refused.
+- The lobby no longer sends the server's internal IP address and port to players.
+
+### Small touches
+
+- The version number now sits quietly in the top corner of the menu screens.
+- Something new is hiding near the **?** button.
+
 ## 2.0.0 (2026-10-09)
 
 The biggest update since launch: several games at once, table chat, two traditional

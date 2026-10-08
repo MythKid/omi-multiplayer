@@ -88,6 +88,9 @@ async function run() {
   // --- duplicate join on one socket keeps a single seat ---
   const a = await sit(1, 'Alice');
   ok(a.lobby && a.lobby.players.length === 1 && a.lobby.tableId === 1, 'first join seats one player at table 1');
+  ok(a.lobby && /^http:\/\/[\d.]+:\d+\/\?table=1$/.test(a.lobby.joinURL) && a.lobby.joinLan === true,
+    'on a LAN the lobby invite is the LAN address for this table (' + (a.lobby && a.lobby.joinURL) + ')');
+  ok(a.lobby && /^data:image\/png;base64,/.test(a.lobby.joinQR || ''), 'the lobby has a join QR code straight away');
   const dupErr = waitEvent(a.sock, 'join-error', 1000);
   a.sock.emit('join-table', { tableId: 2, name: 'AliceAgain' });
   ok(!!(await dupErr), 'a seated socket cannot take a second seat');
@@ -340,7 +343,21 @@ async function run() {
   // --- idle reaper (on a server with very short idle timeouts) ---
   server.kill();
   await wait(400);
-  await startServer({ GAME_IDLE_MIN: '0.05', LOBBY_IDLE_MIN: '0.05' }); // 3 s each
+  // This server also runs as a deployment would (production, no PUBLIC_URL),
+  // to check invites use the public domain a player came in on.
+  await startServer({ GAME_IDLE_MIN: '0.05', LOBBY_IDLE_MIN: '0.05', NODE_ENV: 'production', PUBLIC_URL: '', LOG_LEVEL: 'info' });
+
+  const publicSock = connect({ extraHeaders: { host: 'omi.example.org', 'x-forwarded-proto': 'https' } });
+  await waitEvent(publicSock, 'connect');
+  const firstLobby = waitEvent(publicSock, 'lobby-update', 3000);
+  publicSock.emit('join-table', { tableId: 3, name: 'Remote' });
+  let pl = await firstLobby;
+  ok(pl && pl.joinURL === 'https://omi.example.org/?table=3' && pl.joinLan === false && !pl.joinAltURL,
+    'deployed without PUBLIC_URL, the invite is the public address (' + (pl && pl.joinURL) + ')');
+  if (pl && !pl.joinQR) pl = await waitEvent(publicSock, 'lobby-update', 3000); // QR drawn on demand
+  ok(pl && /^data:image\/png;base64,/.test(pl.joinQR || ''), 'its QR code is drawn for that public address');
+  publicSock.close();
+  await wait(200);
 
   const idleLobby = await sit(1, 'Sleepy');
   const lobbyClosed = await waitEvent(idleLobby.sock, 'table-left', 6000);

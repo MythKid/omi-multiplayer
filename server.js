@@ -10,7 +10,7 @@ const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const { Server } = require('socket.io');
 const qrterminal = require('qrcode-terminal');
-const QRCode = require('qrcode');
+const qr = require('./utils/qr');
 
 const config = require('./config');
 const logger = require('./utils/logger');
@@ -174,18 +174,10 @@ async function start() {
   // Work out the reachable LAN address before advertising it (skipped when a
   // public URL is configured), then build the join QR, then listen.
   if (!config.publicUrl) await network.resolveLocalIP();
-  // One join QR per table, so scanning a lobby's code lands at that table.
-  for (const id of gameManager.tableIds()) {
-    try {
-      const qr = await QRCode.toDataURL(`${network.getJoinURL()}/?table=${id}`, {
-        margin: 1, width: 320, errorCorrectionLevel: 'M',
-        color: { dark: '#0d2b18ff', light: '#f4ecd0ff' },
-      });
-      gameManager.setTableQR(id, qr);
-    } catch (e) {
-      logger.warn(`Could not build the join QR code for table ${id}:`, e.message);
-    }
-  }
+  // Draw each table's join QR for the advertised address up front, so the
+  // first lobby shows it at once. Lobbies reached through another address
+  // (a public domain without PUBLIC_URL) get theirs drawn on demand.
+  await Promise.all(gameManager.tableIds().map(id => qr.make(`${network.getJoinURL()}/?table=${id}`)));
   if (config.maxSocketsRequested !== null && config.maxSockets !== config.maxSocketsRequested) {
     logger.warn(`MAX_SOCKETS=${config.maxSocketsRequested} is too low for ${config.maxSlots} tables; ` +
       `using ${config.maxSockets}. Remove MAX_SOCKETS, or lower MAX_SLOTS to use fewer.`);

@@ -94,6 +94,26 @@ ok(socketCap({ MAX_SOCKETS: '100' }) === 100, 'a larger MAX_SOCKETS is kept');
 ok(socketCap({ MAX_SLOTS: '2', MAX_SOCKETS: '16' }) === 16, 'MAX_SOCKETS=16 is enough for 2 tables');
 ok(socketCap({ MAX_SOCKETS: 'lots' }) === 32, 'a non-numeric MAX_SOCKETS falls back to the default');
 
+// The lobby's invite must be an address friends can reach: the public domain
+// when deployed (even without PUBLIC_URL), the LAN address when hosting at home.
+function inviteOf(env, headers) {
+  const base = Object.assign({}, process.env);
+  ['NODE_ENV', 'PUBLIC_URL', 'PORT'].forEach(k => { delete base[k]; });
+  const code = "console.log(JSON.stringify(require('./utils/network').inviteBase(" + JSON.stringify(headers) + ')))';
+  const r = spawnSync(process.execPath, ['-e', code],
+    { cwd: ROOT, encoding: 'utf8', env: Object.assign(base, { LOG_LEVEL: 'error' }, env) });
+  try { return JSON.parse(String(r.stdout).trim()); } catch (e) { return {}; }
+}
+let inv = inviteOf({ NODE_ENV: 'production' }, { host: 'omi.example.org', 'x-forwarded-proto': 'https' });
+ok(inv.base === 'https://omi.example.org' && inv.lan === false,
+  'deployed without PUBLIC_URL: the invite uses the public domain, not the container address');
+inv = inviteOf({ NODE_ENV: 'production', PUBLIC_URL: 'https://play.example.org' }, { host: 'omi.example.org' });
+ok(inv.base === 'https://play.example.org', 'PUBLIC_URL wins when it is set');
+inv = inviteOf({}, { host: 'localhost:3000' });
+ok(/^http:\/\/[\d.]+:3000$/.test(inv.base) && inv.lan === true, 'hosting at home: the invite uses the LAN address (' + inv.base + ')');
+inv = inviteOf({ NODE_ENV: 'production' }, { host: '<bad host>' });
+ok(inv.lan === true && !/bad/.test(inv.base), 'a malformed Host header never ends up in an invite');
+
 // ---------------------------------------------------------------------------
 console.log('\n[3] Client assets resolve');
 // ---------------------------------------------------------------------------

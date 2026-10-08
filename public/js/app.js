@@ -1837,7 +1837,7 @@
         }
 
         var or = document.createElement('div');
-        or.textContent = 'or open this on the same Wi-Fi:';
+        or.textContent = data.joinLan ? 'or open this on the same Wi-Fi:' : 'or share this link:';
         ipHint.appendChild(or);
 
         var ip = document.createElement('span');

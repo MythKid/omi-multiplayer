@@ -99,15 +99,37 @@ function getJoinHost() {
   return /^[a-z0-9-]+$/.test(h) ? h + '.local' : '';
 }
 
+// Where a player should send friends, as { base, lan }. PUBLIC_URL wins.
+// Otherwise, a visitor who reached us by a public hostname (deployed behind a
+// proxy without PUBLIC_URL) shares that same address; on a LAN or localhost
+// the detected Wi-Fi address is shared instead, since "localhost" on the
+// host's machine means nothing to anyone else.
+function inviteBase(headers) {
+  if (config.publicUrl) return { base: config.publicUrl, lan: false };
+  const h = headers || {};
+  const host = String(h.host || '').trim().toLowerCase();
+  const bare = host.replace(/:\d+$/, '');
+  const looksPublic = /^[a-z0-9.-]+(:\d+)?$/.test(host) && /[a-z]/.test(bare) &&
+    !PRIVATE_HOST.test(bare) && !bare.endsWith('.local') && bare.includes('.');
+  if (looksPublic) {
+    const fwd = String(h['x-forwarded-proto'] || '').split(',')[0].trim().toLowerCase();
+    const proto = fwd === 'https' || fwd === 'http' ? fwd : (config.isProduction ? 'https' : 'http');
+    return { base: `${proto}://${host}`, lan: false };
+  }
+  return { base: getJoinURL(), lan: true };
+}
+
 // Answer only for hostnames we trust. On a LAN this blocks DNS-rebinding by
-// permitting private addresses only. In production it honours ALLOWED_HOSTS,
-// or trusts the proxy when none is configured.
+// permitting private addresses (and this machine's own .local name, which the
+// lobby offers as an alternative link) only. In production it honours
+// ALLOWED_HOSTS, or trusts the proxy when none is configured.
 function hostAllowed(hostHeader) {
   if (!hostHeader) return false;
   const host = String(hostHeader).replace(/:\d+$/, '').toLowerCase();
   if (config.allowedHosts.length) return config.allowedHosts.includes(host);
   if (config.isProduction) return true; // behind a trusted proxy, host is the public domain
-  return PRIVATE_HOST.test(host);
+  const mdns = getJoinHost();
+  return PRIVATE_HOST.test(host) || (mdns !== '' && host === mdns);
 }
 
 // Reject cross-site WebSocket/handshake attempts: the Origin, if present,
@@ -129,6 +151,7 @@ module.exports = {
   getLocalIP,
   getJoinURL,
   getJoinHost,
+  inviteBase,
   hostAllowed,
   originAllowed,
 };

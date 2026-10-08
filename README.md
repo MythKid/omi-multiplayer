@@ -302,7 +302,7 @@ defaults.
 | `PORT` | `3000` | Port to listen on. |
 | `NODE_ENV` | `development` | `production` quiets logs, trusts the proxy for host checks, and skips the LAN QR banner. |
 | `ALLOWED_HOSTS` | (empty) | Comma-separated hostnames to answer to. Empty on a LAN (private addresses are allowed automatically); set it in production to lock the server to your domain. |
-| `PUBLIC_URL` | (empty) | Public base URL to advertise in join links / QR when deployed behind a proxy. |
+| `PUBLIC_URL` | (empty) | Public base URL to advertise in join links / QR when deployed behind a proxy. If unset, a player who reached the game by a public domain is shown invites for that domain; on a LAN the detected Wi-Fi address is used. |
 | `TRUST_PROXY` | `1` | Proxy hops to trust for the real client IP and protocol. |
 | `MAX_SLOTS` | `4` | Number of tables (independent games), 1 to 16. Each seats up to four players. |
 | `MAX_SOCKETS` | `MAX_SLOTS*4 + 16` | Maximum simultaneous connections (seated players plus people browsing tables). Never lower than `MAX_SLOTS*4 + 4`; a smaller value is raised to that. |
@@ -776,7 +776,7 @@ of this project elsewhere, reach out through [nodenull.org](https://nodenull.org
 
 ## Changelog
 
-The current version is **2.0.0**. Release notes for every version are in
+The current version is **2.0.1**. Release notes for every version are in
 [CHANGELOG.md](CHANGELOG.md), and the in-game How to Play panel opens with a short
 "What's new" summary. `GET /api/health` reports the running version.
 

@@ -7,6 +7,7 @@ const game = require('../game');
 const config = require('../config');
 const logger = require('../utils/logger');
 const network = require('../utils/network');
+const qr = require('../utils/qr');
 const { nameKey } = require('../utils/sanitize');
 const leaderboard = require('./leaderboardService');
 const { sanitizeMessage, ChatLog, makeChatLimiter } = require('./chat');
@@ -53,7 +54,6 @@ class Table {
     this.room = 't:' + id;
     this.io = io;
     this.hooks = hooks;
-    this.joinQR = null;
 
     this.players = [];   // { id, name, seat, ready, connected, token, graceTimer, choice }
     this.mode = 4;
@@ -137,8 +137,18 @@ class Table {
     this.io.to(this.room).emit(event, payload);
   }
 
-  joinURL() {
-    return `${network.getJoinURL()}/?table=${this.id}`;
+  // This table's invite as seen by one player's socket: the address they
+  // reached us on when it is public, otherwise the LAN address.
+  inviteFor(socket) {
+    const { base, lan } = network.inviteBase(socket && socket.handshake && socket.handshake.headers);
+    const joinHost = lan ? network.getJoinHost() : '';
+    const url = `${base}/?table=${this.id}`;
+    return {
+      joinURL: url,
+      joinLan: lan,
+      joinAltURL: joinHost ? `http://${joinHost}:${config.port}/?table=${this.id}` : '',
+      joinQR: qr.get(url, () => this.broadcastLobbyUpdate()),
+    };
   }
 
   touchLobby() {
@@ -156,27 +166,23 @@ class Table {
   }
 
   broadcastLobbyUpdate() {
+    if (this.gameState) return; // the lobby is not on screen during a game
     const host = this.players.find(p => p.id === this.hostId);
-    const joinHost = network.getJoinHost();
     const payload = {
       tableId: this.id,
       label: this.label,
       players: this.players.map(p => ({ name: p.name, seat: p.seat })),
       mode: this.mode,
       hostSeat: host ? host.seat : 0,
-      serverIP: network.getLocalIP(),
-      serverPort: config.port,
-      joinURL: this.joinURL(),
-      joinAltURL: joinHost && !config.publicUrl
-        ? `http://${joinHost}:${config.port}/?table=${this.id}`
-        : '',
-      joinQR: this.joinQR,
       teamPairing: this.teamPairing,
     };
     this.players.forEach(p => {
       const socket = this.socketOf(p);
       if (!socket) return;
-      socket.emit('lobby-update', { ...payload, isHost: p.id === this.hostId, yourSeat: p.seat });
+      socket.emit('lobby-update', Object.assign({}, payload, this.inviteFor(socket), {
+        isHost: p.id === this.hostId,
+        yourSeat: p.seat,
+      }));
     });
   }
 

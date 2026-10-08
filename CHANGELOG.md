@@ -20,6 +20,11 @@ protocol or stored data, a minor version adds features, a patch fixes bugs.
   link actually opens the game instead of being refused.
 - The lobby no longer sends the server's internal IP address and port to players.
 
+### Small touches
+
+- The version number now sits quietly in the top corner of the menu screens.
+- Something new is hiding near the **?** button.
+
 ## 2.0.0 (2026-10-09)
 
 The biggest update since launch: several games at once, table chat, two traditional

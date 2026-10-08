@@ -73,6 +73,9 @@
       $('screen-game').style.display = name === 'game' ? 'block' : 'none';
       // Chat belongs to a table: available in its lobby, game and results.
       if (window.OmiChat) window.OmiChat.setAvailable(name === 'lobby' || name === 'game');
+      // The version sits in the corner of the menu screens; in a game that
+      // corner belongs to the trump panel.
+      $('corner-version').style.display = name === 'game' ? 'none' : '';
     }
 
     function showToast(msg, ms) {
@@ -830,6 +833,30 @@
         });
       }
 
+      // Two short nasal grunts
+      function oink() {
+        if (!ensure()) return;
+        [0, 0.17].forEach(function (offset, i) {
+          var t = ctx.currentTime + offset;
+          var o = ctx.createOscillator();
+          o.type = 'sawtooth';
+          o.frequency.setValueAtTime(i ? 300 : 260, t);
+          o.frequency.exponentialRampToValueAtTime(i ? 430 : 380, t + 0.06);
+          o.frequency.exponentialRampToValueAtTime(i ? 220 : 200, t + 0.14);
+          var f = ctx.createBiquadFilter();
+          f.type = 'bandpass';
+          f.frequency.value = 900;
+          f.Q.value = 3;
+          var g = ctx.createGain();
+          g.gain.setValueAtTime(0.001, t);
+          g.gain.exponentialRampToValueAtTime(0.16, t + 0.02);
+          g.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+          o.connect(f); f.connect(g); g.connect(ctx.destination);
+          o.start(t);
+          o.stop(t + 0.16);
+        });
+      }
+
       // Bright little arpeggio for the big moments
       function fanfare() {
         if (!ensure()) return;
@@ -853,7 +880,7 @@
 
       return {
         startWash: startWash, setWash: setWash, stopWash: stopWash,
-        snap: snap, thump: thump, riffle: riffle, swish: swish, fanfare: fanfare, pop: pop,
+        snap: snap, thump: thump, riffle: riffle, swish: swish, fanfare: fanfare, pop: pop, oink: oink,
       };
     })();
 
@@ -2240,11 +2267,37 @@
     $('info-overlay').addEventListener('click', function (e) {
       if (e.target === $('info-overlay')) $('info-overlay').style.display = 'none';
     });
+    // The How to Play footer shows the same version as the corner label.
+    $('app-version').textContent = $('corner-version').textContent;
+
+    // ---------- A small secret ----------
+
+    var hintTimer = null;
+    function hideHint() {
+      clearTimeout(hintTimer);
+      $('hint-bubble').classList.remove('show');
+      $('hint-bubble').style.display = 'none';
+      $('btn-hint').setAttribute('aria-expanded', 'false');
+    }
+    $('btn-hint').addEventListener('click', function () {
+      var bubble = $('hint-bubble');
+      if (bubble.style.display !== 'none') { hideHint(); return; }
+      bubble.style.display = 'block';
+      bubble.classList.remove('show');
+      void bubble.offsetWidth; // restart the pop-out animation
+      bubble.classList.add('show');
+      $('btn-hint').setAttribute('aria-expanded', 'true');
+      Sound.oink();
+      clearTimeout(hintTimer);
+      hintTimer = setTimeout(hideHint, 4000);
+    });
+
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') {
         $('info-overlay').style.display = 'none';
         $('leaderboard-overlay').style.display = 'none';
         window.OmiChat.close();
+        hideHint();
       }
     });
 

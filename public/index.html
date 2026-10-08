@@ -156,6 +156,13 @@
   <!-- Info button + How-to-play overlay -->
   <button id="btn-info" title="How to play" aria-label="How to play">?</button>
 
+  <!-- A small hint, stacked above the ? button -->
+  <button id="btn-hint" type="button" title="Hint" aria-label="Hint" aria-expanded="false" aria-controls="hint-bubble">💡</button>
+  <div id="hint-bubble" role="status" aria-live="polite" style="display:none">Beware of the <span class="pig">🐽</span></div>
+
+  <!-- Version, small and quiet in the corner of the menu screens -->
+  <div id="corner-version">v2.0.1</div>
+
   <div id="info-overlay" style="display:none" role="dialog" aria-modal="true" aria-label="How to play OMI">
     <div class="ov-box info-box">
       <button id="info-close" aria-label="Close">×</button>
@@ -265,7 +272,7 @@
       <div class="info-credit">
         Notes created by <b>Methindu Damsara</b> |
         <a href="https://nodenull.org" target="_blank" rel="noopener noreferrer">nodenull.org</a>
-        <div class="info-version">OMI <span id="app-version">v2.0.1</span></div>
+        <div class="info-version">OMI <span id="app-version"></span></div>
       </div>
     </div>
   </div>

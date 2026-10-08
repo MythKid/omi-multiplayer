@@ -49,7 +49,7 @@
     #btn-info, #btn-home, .tok.pop { animation: none !important; }
     .conf { display: none !important; }
     .splash-item { animation-duration: .35s !important; }
-    .lb-row, .lb-mcard, .chat-bubble { animation: none !important; }
+    .lb-row, .lb-mcard, .chat-bubble, #hint-bubble, #hint-bubble .pig { animation: none !important; }
   }
 
   /* ---------- Join & Lobby screens ---------- */
@@ -1475,6 +1475,66 @@
   }
   #btn-info:hover { transform: scale(1.12); box-shadow: 0 0 16px rgba(232,197,71,.5); }
 
+  /* Version: small and quiet in the top-right corner of the menu screens
+     (hidden in a game, where the trump panel sits in that corner) */
+  #corner-version {
+    position: fixed;
+    top: max(8px, env(safe-area-inset-top));
+    right: max(24px, env(safe-area-inset-right)); /* clear of a desktop scrollbar */
+    font-family: 'Lora', Georgia, serif;
+    font-size: 11px;
+    letter-spacing: .5px;
+    color: rgba(232,197,71,.5);
+    z-index: 5;
+    pointer-events: none;
+  }
+
+  /* A small hint button stacked above the ? button, with a pop-out bubble */
+  #btn-hint {
+    position: fixed;
+    right: calc(max(14px, env(safe-area-inset-right)) + 5px);
+    bottom: calc(max(14px, env(safe-area-inset-bottom)) + 50px);
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    border: 1px solid rgba(201,162,39,.55);
+    background: rgba(0,0,0,.45);
+    font-size: 13px;
+    line-height: 1;
+    padding: 0;
+    opacity: .7;
+    z-index: 90;
+    transition: transform .15s, opacity .15s, box-shadow .15s;
+  }
+  #btn-hint:hover, #btn-hint[aria-expanded="true"] {
+    opacity: 1;
+    transform: scale(1.1);
+    box-shadow: 0 0 14px rgba(232,197,71,.55);
+  }
+  #hint-bubble {
+    position: fixed;
+    right: calc(max(14px, env(safe-area-inset-right)) + 44px);
+    bottom: calc(max(14px, env(safe-area-inset-bottom)) + 52px);
+    background: #f4ecd0;
+    color: #1a1a2e;
+    font-family: 'Cinzel', serif;
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 1px;
+    white-space: nowrap;
+    padding: 8px 14px;
+    border-radius: 14px 14px 4px 14px;
+    box-shadow: 0 6px 20px rgba(0,0,0,.55);
+    transform-origin: bottom right;
+    z-index: 91;
+  }
+  #hint-bubble.show { animation: hintPop .35s cubic-bezier(.3,1.5,.5,1) both; }
+  #hint-bubble .pig { display: inline-block; font-size: 16px; animation: pigSniff .5s ease-in-out .35s 3; }
+  @keyframes hintPop { from { transform: scale(.2); opacity: 0; } }
+  @keyframes pigSniff {
+    0%, 100% { transform: scale(1) rotate(0); }
+    50% { transform: scale(1.3) rotate(-8deg); }
+  }
+
   #info-overlay {
     position: fixed;
     inset: 0;
@@ -1549,6 +1609,16 @@
     .chat-foot { display: none; }
     #scores { padding: 6px 8px; min-width: 100px; max-width: 126px; max-height: 52vh; overflow-y: auto; }
     #btn-info { width: 34px; height: 34px; font-size: 16px; }
+    #btn-hint {
+      width: 26px; height: 26px; font-size: 11px;
+      right: calc(max(14px, env(safe-area-inset-right)) + 4px);
+      bottom: calc(max(14px, env(safe-area-inset-bottom)) + 42px);
+    }
+    #hint-bubble {
+      right: calc(max(14px, env(safe-area-inset-right)) + 36px);
+      bottom: calc(max(14px, env(safe-area-inset-bottom)) + 44px);
+      font-size: 12px;
+    }
     #btn-home { width: 34px; height: 34px; font-size: 14px; }
     #lobby-qr { width: 168px; height: 168px; }
     .sc-h { font-size: 9px; letter-spacing: 2px; margin-bottom: 3px; }

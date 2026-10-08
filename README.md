@@ -776,9 +776,12 @@ of this project elsewhere, reach out through [nodenull.org](https://nodenull.org
 
 ## Changelog
 
-The current version is **2.0.1**. Release notes for every version are in
-[CHANGELOG.md](CHANGELOG.md), and the in-game How to Play panel opens with a short
-"What's new" summary. `GET /api/health` reports the running version.
+The current version is **2.0.1**. It is shown small in the top-right corner of the
+menu screens and in the How to Play panel, which also opens with a short "What's new"
+summary. Release notes for every version are in [CHANGELOG.md](CHANGELOG.md), and
+`GET /api/health` reports the running version. (The version string lives once in
+`public/index.html`, in the corner label; `npm run test:dist` checks it matches
+`package.json`.)
 
 ## Known limits
 

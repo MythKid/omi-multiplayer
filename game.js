@@ -12,7 +12,8 @@ const IS_RED = { '♥': true, '♦': true, '♠': false, '♣': false };
 const RANKS = ['7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
 const RV = { '7': 0, '8': 1, '9': 2, '10': 3, 'J': 4, 'Q': 5, 'K': 6, 'A': 7 };
 
-const AI_NAMES = ['Kamal', 'Nimal', 'Sunil'];
+// Bots take the first of these not already used by a human at the table.
+const AI_NAMES = ['Kamal', 'Nimal', 'Sunil', 'Ruwan', 'Saman', 'Amal', 'Chathura'];
 
 // ---------- Helpers ----------
 
@@ -124,11 +125,13 @@ function startRound4(gs) {
 
 function createGame(lobbyPlayers, mode, initialDeck) {
   const players = [];
+  const taken = new Set(lobbyPlayers.map(p => String(p.name).toLowerCase()));
+  const botNames = AI_NAMES.filter(n => !taken.has(n.toLowerCase()));
   let aiIdx = 0;
   for (let seat = 0; seat < mode; seat++) {
     const human = lobbyPlayers.find(p => p.seat === seat);
     players.push({
-      name: human ? human.name : AI_NAMES[aiIdx++],
+      name: human ? human.name : botNames[aiIdx++],
       seat,
       team: mode === 4 ? seat % 2 : seat,
       isAI: !human,

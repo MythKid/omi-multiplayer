@@ -593,6 +593,13 @@ class Table {
     if (!player) return;
     const gs = this.gameState;
     if (gs && !gs.gameOver) {
+      // Someone sitting this game out (more people than the mode seats)
+      // simply goes; only a seated player's leaving ends the match.
+      if (player.seat >= gs.mode) {
+        this.release(player);
+        this.notifyChanged();
+        return;
+      }
       this.abandon(player.seat, 'left');
       return;
     }
@@ -678,6 +685,13 @@ class Table {
     const player = this.playerBySocket(socket);
     if (!player) return; // unknown, or already replaced by a reconnect
     const gs = this.gameState;
+
+    // Not seated in this game (sitting it out): nothing to hold.
+    if (gs && !gs.gameOver && player.seat >= gs.mode) {
+      this.release(player);
+      this.notifyChanged();
+      return;
+    }
 
     // Mid-game: hold the seat so a refresh or brief drop can reclaim it.
     if (gs && !gs.gameOver) {

@@ -27,6 +27,7 @@ Live at **[omi.nodenull.org](https://omi.nodenull.org)**. Built by **Methindu Da
 - [Project layout](#project-layout)
 - [Testing](#testing)
 - [Roadmap](#roadmap)
+- [Known limits](#known-limits)
 - [License](#license)
 - [Troubleshooting](#troubleshooting)
 
@@ -68,15 +69,24 @@ mathematics of card mixing rather than a perfect randomiser (see
 
 ## Features
 
+- **Several tables at once**: the server runs a fixed number of independent tables
+  (4 by default). Pick an open one; a table locks once its game starts, and each
+  table has its own lobby, deck, chat, and invite link.
 - **2, 3, and 4 player modes**, with bots filling any empty seats so you can play solo.
 - **A real physical deck** (4 player): you wash, shuffle, and cut the cards by hand, and
   the same 32 cards carry over from round to round. The shuffle is modelled on real card
   mixing rather than a perfect randomiser (see below).
 - **Team selection**: the host picks who partners with whom before the game starts.
-- **Persistent online leaderboard** for winning teams, stored in SQLite, sorted highest
-  first with the top three highlighted.
+- **Real table rules**: the trump caller's partner may not look at any cards until trump
+  is called, and a hand where either team holds fewer than 2 trumps is thrown in and
+  redealt by the same dealer.
+- **Table chat**: public table talk that never blocks the cards, with speech bubbles at
+  each seat, quick phrases, and per-player mute.
+- **Rated leaderboard**: individual Elo-style ratings, a grade for every player in every
+  4-player match, and a round-by-round history of who played whom and how it went.
 - **Reconnect support**: refresh the page or drop off Wi-Fi and you reclaim your seat
-  within a grace window instead of ending the match for everyone.
+  within a grace window instead of ending the match for everyone. After the match,
+  everyone can stay at the table for a rematch.
 - **Installable (PWA)**: add it to a phone or desktop home screen; it loads offline.
 - **Join by QR code or invite link**, plus a scannable code in the terminal.
 - **Responsive and accessible**: adapts from phones to tablets to desktops, with keyboard
@@ -108,16 +118,21 @@ flowchart TD
     B -->|HTTPS| C["Northflank<br/>load balancer and container"]
     C --> D["Express<br/>helmet, rate limiting, static assets"]
     D --> E["Socket.IO<br/>per-socket rate limiting, origin checks"]
-    E --> F["Game Manager<br/>services/gameManager.js"]
-    F --> G["game.js<br/>pure rules engine, no I/O"]
-    D --> H["Leaderboard API<br/>routes/api.js"]
-    H --> I[("SQLite or JSON store")]
+    E --> F["Table manager<br/>services/gameManager.js"]
+    F --> T["Tables 1..N<br/>services/table.js, one room each"]
+    T --> G["game.js<br/>pure rules engine, no I/O"]
+    T --> L["Leaderboard service<br/>ratings, grades, claims"]
+    D --> H["API<br/>routes/api.js"]
+    H --> L
+    L --> I[("SQLite or JSON store")]
 ```
 
 Cloudflare terminates the public connection and proxies it to Northflank, which runs the
 Node process in a container. Express applies security headers and rate limiting before
-anything reaches game logic, and Socket.IO carries the real-time traffic to the game
-manager, which is the only thing that ever touches `game.js`, the pure rules engine.
+anything reaches game logic, and Socket.IO carries the real-time traffic to the table
+manager. The manager routes each socket to the table it sits at; every table is an
+isolated match with its own Socket.IO room, timers, and persistent deck, and only the
+tables ever touch `game.js`, the pure rules engine.
 
 ### Cloudflare: DNS, TLS, and the edge
 
@@ -207,10 +222,15 @@ sequenceDiagram
     P->>S: proxied upgrade request
     S->>S: allowRequest() checks Host and Origin
     S-->>C: 101 Switching Protocols
-    C->>S: emit("join", { name })
-    S->>G: handleJoin()
-    G-->>C: emit("lobby-update")
+    C->>S: emit("browse")
+    G-->>C: emit("tables")
+    C->>S: emit("join-table", { tableId, name, claim })
+    S->>G: handleJoinTable()
+    G-->>C: emit("session"), emit("identity"), emit("lobby-update")
 ```
+
+The client also sends a protocol version in the handshake; a stale cached copy of the
+page is told to reload rather than talk to a newer server with an older event contract.
 
 Every socket gets its own token-bucket rate limiter the moment it connects (see
 [Security architecture](#security-architecture)), and `allowRequest` rejects the
@@ -283,10 +303,13 @@ defaults.
 | `ALLOWED_HOSTS` | (empty) | Comma-separated hostnames to answer to. Empty on a LAN (private addresses are allowed automatically); set it in production to lock the server to your domain. |
 | `PUBLIC_URL` | (empty) | Public base URL to advertise in join links / QR when deployed behind a proxy. |
 | `TRUST_PROXY` | `1` | Proxy hops to trust for the real client IP and protocol. |
-| `MAX_SOCKETS` | `16` | Maximum simultaneous connections. |
+| `MAX_SLOTS` | `4` | Number of tables (independent games), 1 to 16. Each seats up to four players. |
+| `MAX_SOCKETS` | `MAX_SLOTS*4 + 16` | Maximum simultaneous connections (seated players plus people browsing tables). |
+| `GAME_IDLE_MIN` | `5` | Minutes a game waits on one player (turn, shuffle, cut, ready) before it ends. A warning shows a minute earlier. |
+| `LOBBY_IDLE_MIN` | `15` | Minutes a table's lobby can sit with no activity before it is cleared. |
 | `DB_DRIVER` | `auto` | `auto` uses SQLite when available, otherwise a JSON file. Force with `sqlite` or `json`. |
 | `DATA_DIR` | `./data` | Where the leaderboard is stored. Point at a persistent volume in production. |
-| `LEADERBOARD_SIZE` | `100` | Rows to keep and return. |
+| `LEADERBOARD_SIZE` | `100` | Most players the leaderboard returns. |
 | `LOG_LEVEL` | `info` (prod) / `debug` | `error`, `warn`, `info`, or `debug`. |
 
 ## Deployment
@@ -320,6 +343,15 @@ Notes:
 - The persistent volume matters: on an ephemeral container filesystem the SQLite file is
   wiped on every redeploy, and the leaderboard would reset (see
   [Database](#database) for the planned fix).
+- `MAX_SOCKETS` now scales with `MAX_SLOTS` by default. If the platform pins
+  `MAX_SOCKETS=16` explicitly, raise it (the server logs a warning when it is below
+  `MAX_SLOTS*4 + 4`) or remove it.
+- Sizing: each table holds a few KB of game state, up to 50 chat messages, and at most
+  five timers, so 4 tables use well under 1 MB plus the Socket.IO buffers. The busiest
+  traffic is the dealer's wash relay (about 20 small messages a second to three
+  players). A small instance (0.1 to 0.2 vCPU, 256 MB) handles the default 4 tables;
+  raise `MAX_SLOTS` to 8 or so on 0.5 vCPU and up. The database is written once per
+  finished match, never per move.
 - WebSockets are proxied by both Cloudflare and Northflank by default; the client
   connects over `wss:` automatically once the page itself is served over HTTPS.
 - `GET /api/healthz` is wired up as Northflank's health check, so a hung process gets
@@ -379,7 +411,9 @@ The game has a built-in **How to Play** panel (the round `?` button, bottom righ
 every screen) written in plain English. The short version:
 
 1. Start the server, then everyone opens the join link or scans the QR code and enters
-   a name. The first person in is the host.
+   a name. Next comes the **tables screen**: pick an open table (or follow a table's own
+   invite link, `/?table=N`). The first person at a table is its host. A table locks
+   once its game starts; everyone else picks another table.
 2. The host picks a mode and starts. In the 4 player mode the lobby also shows a
    TEAMS panel: the host presses **CHANGE PARTNERS** to cycle through the three
    possible pairings until everyone is happy with who plays with whom, and the
@@ -406,8 +440,15 @@ whole game and are never reshuffled by the computer between rounds. A round goes
    halves together, as many times as you like.
 3. **Cut:** the opponent to the dealer's left slices the squared stack and restacks it.
 4. **Deal 4 and call trump:** the player to the dealer's right gets the first 4 cards
-   and picks the trump suit before anyone gets more.
+   and picks the trump suit before anyone gets more. While they choose, **the caller's
+   partner may not look at any cards**: their hand stays face-down under a red cross
+   and "WAIT" until trump is called. (The server does not even send those cards until
+   then.) The two opponents can look at their own 4 cards as usual.
 5. **Deal 4 more:** hands fill to 8 and the trump caller leads.
+   **Redeal rule:** if either team holds fewer than 2 trumps between its two players,
+   the hand cannot be played. It is thrown in automatically, nothing is scored, and the
+   **same** dealer reshuffles, the **same** opponent cuts, and the **same** player calls
+   trump again. With a well-mixed deck this happens on roughly 1 hand in 27.
 6. Each trick is gathered face-down in the order it was played. Those piles become next
    round's deck, and the deal passes to the right.
 
@@ -431,46 +472,105 @@ play for +3, or stay quiet for the safe +1 or +2.
 player agrees, the match stops and the highest score wins. Level scores end in a draw.
 A single decline cancels the vote.
 
+**After the match.** Everyone chooses **BACK TO TABLE** (stay for a rematch with the
+same group) or **LEAVE TABLE**. Once all have chosen, or after a minute, the table
+returns to its lobby with whoever stayed.
+
+**Chat.** The 💬 button opens the table chat. It is public table talk: everyone at the
+table sees every message, and there is no private team channel. The panel never
+covers your hand, and new messages also pop up briefly next to the speaker's seat.
+Tap a name to mute that player for yourself.
+
 ## Leaderboard
 
-Winning 4 player teams are recorded on a persistent leaderboard, reachable from the
-🏆 button on the start screen and the game-over screen.
+A final score barely varies (the winners almost always finish on 10 to 13), so the
+board ranks **individual players by rating** and grades every match instead. It is
+reachable from the 🏆 button on the join and tables screens and after a match.
 
-- The team name is generated automatically as `Player One + Player Two`, so nobody types
-  a separate name.
-- Only a team's **highest** score is kept. If the same pair plays again and does better,
-  their entry updates; a lower score is ignored, and there are no duplicate rows.
-- Entries are sorted highest first, and each stores the score and the date it was set.
-  The top three are highlighted.
-- Only all-human winning teams are recorded (a team with a bot in it is skipped).
+- **Players tab:** rank, rating with the last change, wins and losses, average grade,
+  and last game. Tap a player for their recent matches: result, score, partner,
+  opponents, grade, and rating change.
+- **Recent matches tab:** who played whom, the score, rounds, redeals, and how it ended.
+  Tap a match for the round-by-round story: who called trump, which suit, the tricks
+  split, what each round scored, and every redeal.
 
-The board is served read-only at `GET /api/leaderboard` and survives server restarts.
+**Rating (Elo for pairs).** A team's strength is the average of its two players'
+ratings. After a match each ranked player moves by `K x margin x repeat x (result -
+expected)`:
+
+| Part | Value |
+| --- | --- |
+| Starting rating | 1200 |
+| `K` | 40 for a player's first 10 rated games, then 24 |
+| margin | 1.0 to 1.5 with the token margin (forfeits use 1.0) |
+| repeat | 1, then 0.5, then 0.25 for the same four people again within 24 hours |
+| Bots, and humans whose name is not ranked | a fixed 1000 that never moves |
+
+Beating bots therefore pays less and less as a player climbs, so they cannot be farmed.
+
+**Grade (0 to 100, shown as a letter).** For each player: 30 for a win (15 for a draw),
+up to 20 for the team's share of the tokens, up to 20 for their own share of the tricks,
+up to 15 for making their own trump calls, up to 10 for the team breaking the other
+side's calls, plus 5 per Kapothi made and minus 5 per Kapothi broken. Letters: **S** 90+,
+**A** 78+, **B** 64+, **C** 50+, **D** 36+, **E** below that, and **F** for leaving
+a match.
+
+**What counts.**
+
+| How the match ended | Recorded | Rated |
+| --- | --- | --- |
+| A team reached 10 tokens | yes | yes |
+| Ended by agreement, leader on 5+ tokens, not level | yes | yes |
+| Ended by agreement earlier, or level | yes | no |
+| A player left (or timed out) after 2+ rounds | yes | yes, as a loss for the leaver's team |
+| A player left in the first round | no | no |
+
+Only 4-player matches are recorded, and only when at least one ranked player took part.
+
+**Names and claims.** There are no accounts, so a ranked name is claimed by a random
+secret that the browser keeps the first time it plays a ranked match under that name.
+Only a SHA-256 hash of the secret is stored, it is compared in constant time, and it is
+checked again when each match is recorded. Anyone can still sit down under any name;
+they are simply not ranked under a name another browser has claimed, so nobody can
+spoil someone else's rating. Generic names such as "Player" or "Guest" are never ranked.
+Names are matched case-insensitively and Unicode-normalised, so "Kamal" and "KAMAL"
+are the same player. The board is served read-only at `GET /api/leaderboard` and
+survives server restarts.
 
 ## Database
 
 Persistence lives behind a small database layer in `database/`, so game logic never
 touches storage directly and the backend can be swapped later.
 
-- **SQLite** (via `better-sqlite3`) is the default. One row per team, keyed by team
-  name, updated in place with an upsert that keeps the higher score.
+- **SQLite** (via `better-sqlite3`) is the default, with three tables: `players`
+  (rating, record, grade total, and the claim hash), `matches` (score, how it ended,
+  whether it was rated, and the round-by-round timeline as JSON), and `match_players`
+  (each seat's line in a match). A match and every rating it moves are written in one
+  transaction.
 - If a native SQLite build is not available (for example inside the packaged `omi.exe`),
-  it automatically falls back to a **JSON file** store with the same interface. Force a
-  backend with `DB_DRIVER=sqlite` or `DB_DRIVER=json`.
-- Moving to PostgreSQL later means writing one more store with the same three methods
-  (`submit`, `top`, `close`) and selecting it in `database/index.js`; nothing above the
-  database layer changes.
+  it automatically falls back to a **JSON file** store (`leaderboard-v2.json`, history
+  capped at 2000 matches) with the same interface. Force a backend with
+  `DB_DRIVER=sqlite` or `DB_DRIVER=json`.
+- The original best-score data (the `scores` table, or `leaderboard.json`) is left
+  exactly as it was; the rated board simply starts fresh beside it.
+- Moving to PostgreSQL later means writing one more store with the same methods
+  (`getPlayer`, `recordMatch`, `topPlayers`, `playerMatches`, `recentMatches`,
+  `getMatch`, `countLineupSince`, `counts`, `close`) and selecting it in
+  `database/index.js`; nothing above the database layer changes.
 
 **Why this is not the final word on persistence.** SQLite works well for development and
 for a platform with a persistent volume attached, which is how the live deployment runs
 it today. On a container platform without one, though, a redeploy or a restart wipes an
 ephemeral filesystem and the leaderboard resets, since there is nothing durable
 underneath the database file itself. The next planned step is a store backed by
-**Turso** (distributed SQLite over libSQL), which keeps the same `submit` / `top` /
-`close` interface and the same SQL, but replaces the local file with a durable,
+**Turso** (distributed SQLite over libSQL), which keeps the same interface and the
+same SQL, but replaces the local file with a durable,
 replicated database, so the leaderboard survives container recreation without needing a
 volume at all.
 
-`GET /api/healthz` returns a small JSON health check for platform probes.
+`GET /api/healthz` returns a small JSON health check for platform probes. The other
+read-only endpoints are `GET /api/tables` (live table summaries), `GET /api/stats`,
+`GET /api/players/:name/matches`, `GET /api/matches`, and `GET /api/matches/:id`.
 
 ## Security architecture
 
@@ -488,9 +588,13 @@ GitHub Security Advisory (GHSA) ID.
 | Event flooding and resource exhaustion | A client spams messages or HTTP requests to pin the CPU or exhaust memory | Per-socket token bucket (about 20 events/s), 16 connection cap, 100 KB socket payload cap, persistent flooders dropped, plus per-IP HTTP rate limiting (`express-rate-limit`) and a 16 KB request-body cap | CWE-400, CWE-770, ATT&CK T1499 |
 | Slow-request holding (Slowloris) | Half-open requests held to tie up the server | `headersTimeout` and `requestTimeout` trim slow windows | CWE-400, ATT&CK T1499.001 |
 | Malicious input in names | Control, zero-width, or bidirectional-override characters used to spoof or corrupt display (the Trojan Source class, CVE-2021-42574) | Names are stripped to printable characters before use | CWE-20, CWE-1007 |
-| Client-side cheating | A modified client tries to peek at hands or act out of turn | Server is authoritative, every action is validated, and a player is only ever sent their own hand | CWE-602, CWE-359 |
+| Client-side cheating | A modified client tries to peek at hands or act out of turn | Server is authoritative, every action is validated, and a player is only ever sent their own hand. The trump caller's partner is not even sent their own hand until trump is called, including after a reconnect | CWE-602, CWE-359 |
+| Cross-table leakage | One table's events reach players at another | Every table has its own Socket.IO room; relays, chat, and notices are sent to that room only, and integration tests assert nothing crosses over | CWE-200 |
+| Table hogging | An idle or abandoned game holds one of the fixed tables forever | One seat per socket; an idle reaper ends a game stuck on one player for `GAME_IDLE_MIN` (after a warning) and clears a quiet lobby after `LOBBY_IDLE_MIN` | CWE-400 |
+| Chat abuse | Spam, script injection, or bidi/zero-width tricks in messages | Server strips control, zero-width and bidi characters, collapses whitespace, caps at 200 characters, rate limits each player (survives reconnects), and the client renders text only, never HTML. Chat is never stored or logged | CWE-79, CWE-20, CWE-770 |
+| Leaderboard manipulation | Playing under someone's name to tank their rating, rage-quitting to dodge a loss, farming bots or alt lineups | Browser-held name claims (SHA-256 hash, constant-time compare, re-checked at record time); leaving after 2 rounds is a rated loss; bots fixed at 1000; repeat lineups count less; early vote ends only rated from 5 tokens | CWE-287, CWE-841 |
 | Clickjacking and MIME sniffing | The page framed by a hostile site, or responses reinterpreted as script | Headers set with **helmet**: `X-Frame-Options: DENY`, `frame-ancestors 'none'`, `X-Content-Type-Options: nosniff`, a strict Content-Security-Policy with no inline scripts, and a locked-down Permissions-Policy | CWE-1021, CWE-16 |
-| Leaderboard input | A team name or score crafted to inject or corrupt display | Names are sanitized the same way as player names; scores are validated as positive integers before storage | CWE-20 |
+| Leaderboard input | A name crafted to inject or corrupt display, or a malformed API query | Names are sanitized the same way as player names and keyed after Unicode normalisation; match ids and limits are validated, and every value is rendered as text | CWE-20 |
 
 Two of these controls are worth walking through, since they are the ones that decide
 whether a request reaches the game at all:
@@ -585,25 +689,32 @@ utils/
 routes/
   api.js                      HTTP API (/api/leaderboard, /api/stats, /api/health)
 services/
-  gameManager.js              Lobby, round flow, reconnect, bot scheduling, handlers
-  leaderboardService.js       Leaderboard business logic (validation, team names)
+  gameManager.js              Table manager: socket routing, tables list, idle reaper
+  table.js                    One table: lobby, round flow, reconnect, bots, results
+  chat.js                     Chat message cleaning, history, and rate limiting
+  rating.js                   Elo ratings, match grades, what counts (pure)
+  identity.js                 Name claims (secret, hash, constant-time verify)
+  leaderboardService.js       Records matches, moves ratings, shapes the API views
 database/
   index.js                    Store factory (SQLite, JSON fallback)
-  sqliteStore.js              SQLite backend
-  jsonStore.js                Portable JSON-file backend
+  sqliteStore.js              SQLite backend (players, matches, match_players)
+  jsonStore.js                Portable JSON-file backend with the same interface
 public/
   index.html                  Client markup shell
   css/styles.css              Client styles
-  js/app.js                   Client logic
+  js/app.js                   Client logic (tables, lobby, game, results)
+  js/chat.js                  Table chat panel and speech bubbles
+  js/leaderboard.js           Leaderboard overlay (players, matches, timeline)
   sw.js                       Service worker (offline / installable)
   manifest.webmanifest        Web app manifest
   favicon.ico                 Multi-size browser-tab icon (16/32/48)
   icons/                      App icons (SVG + raster), favicon, and the social-preview image
   404.html, 500.html          Themed error pages
   socket.io.min.js            Socket.IO browser client, vendored with the repo
-test.js                       Game rules and shuffle-model unit tests
-test-leaderboard.js           Leaderboard unit tests
-test-sockets.js               Socket integration tests (reconnect, cleanup, ...)
+test.js                       Game rules, redeal, and shuffle-model unit tests
+test-rating.js                Rating, grade, and name-claim unit tests
+test-leaderboard.js           Leaderboard tests, run against SQLite and JSON
+test-sockets.js               Socket integration tests (tables, chat, partner wait, ...)
 test-dist.js                  Distribution + live-server checks (npm run test:dist)
 .env.example                  Documented environment variables
 ```
@@ -616,15 +727,24 @@ npm run test:dist   # required files, package contract, assets, security headers
                     # and a live-server smoke test (join, API, malformed input)
 ```
 
-`npm test` runs three suites:
+`npm test` runs four suites:
 
 - **Game and shuffle** (`test.js`): trick resolution, every scoring case (including the
-  Kapothi variant and draw carry-over), deck persistence across rounds, the statistical
+  Kapothi variant and draw carry-over), the redeal rule (stacked short-trump deals, the
+  same roles afterwards, no score, and "redeal if and only if a team is short" over
+  1000 random deals), the match log, deck persistence across rounds, the statistical
   properties of the riffle and overhand models, and full bot games in all three modes.
-- **Leaderboard** (`test-leaderboard.js`): team-name generation, dedupe to the highest
-  score, sorting, input validation, and persistence across a store reload.
-- **Sockets** (`test-sockets.js`): duplicate-join prevention, malformed-packet survival,
-  reconnect (reclaiming a seat with a session token), and lobby cleanup.
+- **Ratings** (`test-rating.js`): expected scores, K, margin and repeat factors, bots
+  fixed at 1000, farming limits, what counts, per-player statistics, grades, and name
+  claims.
+- **Leaderboard** (`test-leaderboard.js`): records real bot-played matches through both
+  the SQLite and JSON stores: ratings, grades, claims (including forgeries caught at
+  record time), vote and forfeit rules, history and match timelines, persistence across
+  a reload, and that legacy data is untouched.
+- **Sockets** (`test-sockets.js`): tables (isolation, locking, leaving, rematch),
+  chat (scoping, cleaning, rate limits, history), the partner wait (including across a
+  reconnect), identity, duplicate-join prevention, malformed-packet survival, reconnect,
+  version handshake, and the idle reaper.
 
 ## Roadmap
 
@@ -637,7 +757,9 @@ database layer, service layer, and API routes are the natural seams for what com
 - **Match history and richer statistics** (the `/api/stats` endpoint is the starting point).
 - **Achievements and cosmetics**.
 - **Global and season rankings** built on the same leaderboard store, or a PostgreSQL one.
-- **Spectator mode** (watch a game in progress without taking a seat).
+- **Spectator mode** (watch a game at a locked table without taking a seat).
+- **Proper accounts** to replace browser-held name claims, so a ranked name can move
+  between devices.
 - **Admin tools** over the API layer.
 
 ## License
@@ -646,6 +768,15 @@ This project is source-available, not open source: the code is here to read, clo
 run locally for evaluation, but redistribution, commercial use, and public redeployment
 are reserved. See [LICENSE](LICENSE) for the exact terms. If you would like to use part
 of this project elsewhere, reach out through [nodenull.org](https://nodenull.org).
+
+## Known limits
+
+- A ranked name is tied to the browser that claimed it (clearing site data or
+  switching devices loses it); accounts are on the roadmap.
+- Chat has no word filter: a naive one fails across Sinhala, Tamil, and English. Each
+  player can mute anyone for themselves.
+- There is no per-IP limit on seats: behind Cloudflare many real players share edge
+  addresses. One seat per connection and the idle reaper keep tables from being held.
 
 ## Troubleshooting
 
@@ -660,3 +791,6 @@ of this project elsewhere, reach out through [nodenull.org](https://nodenull.org
   network link, not `localhost`.
 - **Leaderboard resets after redeploy:** point `DATA_DIR` at a persistent volume;
   ephemeral filesystems wipe the SQLite file on redeploy.
+- **"The server is full":** raise `MAX_SOCKETS` (or unset it so it follows `MAX_SLOTS`).
+- **My games are "not ranked":** use your own name (generic ones are never ranked), and
+  play from the browser that first claimed it.

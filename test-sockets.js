@@ -59,7 +59,7 @@ function startServer(extraEnv) {
     server = spawn(process.execPath, ['server.js'], {
       cwd: __dirname,
       env: Object.assign({}, process.env, {
-        PORT: String(PORT), LOG_LEVEL: 'error', MAX_SLOTS: '3', MAX_SOCKETS: '', DATA_DIR,
+        PORT: String(PORT), LOG_LEVEL: 'error', MAX_SLOTS: '4', MAX_SOCKETS: '', DATA_DIR,
       }, extraEnv || {}),
     });
     let buf = '';
@@ -82,7 +82,7 @@ async function run() {
   const listP = waitEvent(viewer, 'tables');
   viewer.emit('browse');
   const list = await listP;
-  ok(Array.isArray(list) && list.length === 3, 'browse lists every table (' + (list && list.length) + ')');
+  ok(Array.isArray(list) && list.length === 4, 'browse lists every table (' + (list && list.length) + ')');
   ok(list && list.every(t => t.status === 'empty' && t.canJoin), 'all tables start empty and joinable');
 
   // --- duplicate join on one socket keeps a single seat ---
@@ -252,6 +252,27 @@ async function run() {
     'table is clean after everyone left: newcomer becomes host at seat 0');
   fresh.sock.close();
   viewer.close();
+
+  // --- someone sitting a game out (3 people, 2-player mode) can leave freely ---
+  const d1 = await sit(4, 'DuelA');
+  const d2 = await sit(4, 'DuelB');
+  const d3 = await sit(4, 'Watcher');
+  d1.sock.emit('set-mode', { mode: 2 });
+  await wait(150);
+  const duelStart = waitEvent(d1.sock, 'state-update', 3000);
+  d1.sock.emit('host-start');
+  const duel = await duelStart;
+  ok(duel && duel.mode === 2, 'a 2-player game starts with a third person at the table');
+  const watcherLeft = waitEvent(d3.sock, 'table-left', 2000);
+  const notEnded = waitEvent(d1.sock, 'game-abandoned', 1200);
+  d3.sock.emit('leave-table');
+  ok(!!(await watcherLeft), 'the person sitting out can leave');
+  ok(!(await notEnded), 'their leaving does not end the duel');
+  const tablesNow = await (await fetch(URL + '/api/tables')).json();
+  const t4 = tablesNow.tables.find(t => t.id === 4);
+  ok(t4 && t4.status === 'playing' && t4.humans === 2, 'the duel carries on with its two players');
+  [d1, d2, d3].forEach(p => p.sock.close());
+  await wait(300);
 
   // --- partner wait: the trump caller's partner sees no cards until trump ---
   const four = [];

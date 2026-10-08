@@ -513,6 +513,15 @@ for (const mode of [2, 3]) {
   }
 }
 
+// ---- bots never share a name with a human at the table ----
+{
+  const humans = [{ id: 'a', name: 'kamal', seat: 0 }, { id: 'b', name: 'Nimal', seat: 2 }];
+  const gs = game.createGame(humans, 4);
+  const names = gs.players.map(p => p.name.toLowerCase());
+  assert(new Set(names).size === 4, 'every seat has a distinct name (' + names.join(', ') + ')');
+  console.log('  bot names: no clash with human names ok');
+}
+
 // ---- 2p and 3p auto-deal gives every player all four suits ----
 for (const mode of [2, 3]) {
   for (let i = 0; i < 100; i++) {

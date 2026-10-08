@@ -168,6 +168,12 @@
       The game uses 32 cards: only Ace, King, Queen, Jack, 10, 9, 8 and 7 of
       each suit. Cards rank from Ace (best) down to 7 (worst).</p>
 
+      <div class="info-h">TABLES</div>
+      <p>Several games run at once, each at its own table. After entering your
+      name, pick an open table (or use a friend's table invite link). A table
+      locks as soon as its game starts, so pick another one or wait for it to
+      finish. When a match ends you can stay at the table for a rematch.</p>
+
       <div class="info-h">THE DECK IS REAL</div>
       <p>There is one deck and it never gets magically reset. Cards collected
       from tricks stack up in order, and next round somebody shuffles that same
@@ -180,10 +186,16 @@
         <li><b>Shuffle:</b> chop packets off the deck (click it) or riffle it, as many times as you like.</li>
         <li><b>Cut:</b> the player to the dealer's left slices the stack and restacks it.</li>
         <li><b>First 4 cards:</b> everyone gets 4 cards, starting with the player to the dealer's right.</li>
-        <li><b>Call trump:</b> that same player looks at their 4 cards and picks the trump suit.</li>
+        <li><b>Call trump:</b> that same player looks at their 4 cards and picks the trump suit.
+        Their <b>partner must wait</b>: their cards stay hidden under a red cross until
+        trump is called. The other team can look at their 4 cards.</li>
         <li><b>Last 4 cards:</b> everyone gets 4 more. Now you hold 8.</li>
         <li><b>Play 8 tricks:</b> the trump caller leads the first trick. Play goes counter-clockwise.</li>
       </ul>
+      <p><b>Redeal:</b> if either team holds fewer than 2 trumps between its two
+      players, the hand cannot be played. The cards are thrown in, nobody scores,
+      and the same dealer reshuffles, the same player cuts and the same player
+      calls trump again.</p>
 
       <div class="info-h">PLAYING A TRICK</div>
       <p>Each player throws one card. You <b>must follow the suit</b> of the
@@ -212,6 +224,19 @@
       <p>Anyone can press <b>END MATCH EARLY</b> under the scores. If every
       player agrees, the match stops and whoever has the most tokens wins.
       One "no" and the game carries on.</p>
+
+      <div class="info-h">CHAT</div>
+      <p>Tap 💬 to talk to your table. Everyone at the table sees every message
+      (there is no private team chat), and new messages pop up next to the
+      player who sent them. Tap a name in the chat to mute that player.</p>
+
+      <div class="info-h">LEADERBOARD</div>
+      <p>Every 4-player match is graded (S, A, B, C, D, E) on the result, your
+      team's tokens, your tricks, the calls you made and the calls your team
+      broke. Players are ranked by a rating that rises when you beat strong
+      opponents and falls when you lose. Use your own name: generic names like
+      "Player" are not ranked, and your name stays yours on this browser.
+      Leaving a match after two rounds counts as a loss.</p>
 
       <div class="info-h">2 &amp; 3 PLAYER MODES</div>
       <p><b>2 players:</b> 8 cards each plus a draw pile. The pile's top card
@@ -260,7 +285,8 @@
   <div id="home-confirm-overlay" style="display:none" role="dialog" aria-modal="true" aria-label="Leave game">
     <div class="ov-box">
       <div class="ov-title">NodeNull</div>
-      <div class="ov-note">Abandon the current game and return to the home page?</div>
+      <div class="ov-note">Leave your table and return to the home page? A game in progress ends
+      for everyone, and after two rounds it counts as a loss for your team.</div>
       <button id="btn-home-leave" class="ov-btn-pri">LEAVE GAME</button>
       <button id="btn-home-stay" class="btn-secondary" style="margin-top:10px">STAY IN GAME</button>
     </div>

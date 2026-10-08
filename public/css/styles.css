@@ -585,6 +585,38 @@
   .hand.horiz .card:first-child { margin-left: 0; }
   .hand.mine .card { margin-left: calc(var(--cw) * -0.4); }
   .hand.mine .card:first-child { margin-left: 0; }
+
+  /* The trump caller's partner waits: cards face-down under a red cross */
+  .locked-wrap { position: relative; display: flex; justify-content: center; }
+  .hand.locked .card { filter: brightness(.7) saturate(.6); }
+  .hand-lock {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    pointer-events: none;
+  }
+  .lock-x {
+    font-size: calc(var(--ch) * 0.55);
+    line-height: 1;
+    font-weight: 900;
+    color: #ff4d4d;
+    text-shadow: 0 2px 10px rgba(0,0,0,.8);
+  }
+  .lock-w {
+    font-family: 'Cinzel', serif;
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: 3px;
+    color: #fff;
+    background: rgba(170, 28, 28, .9);
+    border: 1px solid #ff8f8f;
+    border-radius: 6px;
+    padding: 2px 10px;
+  }
   .hand.vert { flex-direction: column; }
   .hand.vert .card { margin-top: calc(var(--chS) * -1.07); }
   .hand.vert .card:first-child { margin-top: 0; }

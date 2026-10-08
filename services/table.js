@@ -37,9 +37,11 @@ const PHASE_DELAYS = {
   trump: 2600,
   kapothi: 2200,
   play: 1400,
+  redeal: 4200, // time to read why the hand is being thrown in
 };
 const JITTER_PHASES = { play: 800, trump: 800 };
-const AUTO_PHASES = ['dealing1', 'dealing2'];
+// Phases that advance on a timer for everyone, whoever's seat is current.
+const AUTO_PHASES = ['dealing1', 'dealing2', 'redeal'];
 
 class Table {
   // hooks.detach(player, notice) releases a player's socket back to the
@@ -176,6 +178,12 @@ class Table {
   }
 
   buildClientState(gs, forSeat) {
+    // While trump is being chosen, the caller's partner may not look at any
+    // cards, their own included. The hand is withheld here on the server, so
+    // no client (or reconnect) can ever see it early. Opponents look as usual.
+    const lockedSeat = gs.mode === 4 && gs.phase === 'trump' ? (gs.trumpCallerSeat + 2) % 4 : -1;
+    const own = gs.players[forSeat] ? gs.players[forSeat].hand : [];
+    const locked = forSeat === lockedSeat;
     return {
       tableId: this.id,
       tableLabel: this.label,
@@ -212,8 +220,11 @@ class Table {
         cardCount: p.hand.length, // others see count only
         isYou: i === forSeat,
       })),
-      myHand: gs.players[forSeat] ? gs.players[forSeat].hand : [],
+      myHand: locked ? [] : own,
+      myHandLocked: locked ? own.length : 0,
       mySeat: forSeat,
+      redeal: gs.phase === 'redeal' ? gs.redealInfo : null,
+      redealCount: gs.redealsThisRound || 0,
       readyCount: gs.readyCount || 0,
       totalPlayers: gs.players.length,
       // Seats whose human is currently disconnected but still within the
@@ -397,6 +408,8 @@ class Table {
       game.dealStage1(gs);
     } else if (phase === 'dealing2') {
       game.dealStage2(gs);
+    } else if (phase === 'redeal') {
+      game.redealRound(gs);
     } else if (phase === 'trump') {
       game.chooseTrump(gs, game.aiPickTrump(gs, currentSeat));
     } else if (phase === 'kapothi') {

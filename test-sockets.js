@@ -219,6 +219,51 @@ async function run() {
   fresh.sock.close();
   viewer.close();
 
+  // --- partner wait: the trump caller's partner sees no cards until trump ---
+  const four = [];
+  for (const n of ['North', 'East', 'South', 'West']) four.push(await sit(3, n));
+  const stateOf = four.map(() => null);
+  four.forEach((p, i) => p.sock.on('state-update', (d) => { stateOf[i] = d; }));
+  const started = waitEvent(four[0].sock, 'state-update', 4000);
+  four[0].sock.emit('host-start');
+  const st0 = await started;
+  ok(st0 && st0.dealer === 0 && st0.trumpCallerSeat === 1 && st0.breakerSeat === 3,
+    'four humans: seat 0 deals, seat 1 calls trump, seat 3 cuts');
+  // Seat 0 washes for the minimum time, then offers the deck.
+  for (let i = 0; i < 6; i++) { four[0].sock.emit('shuffle-move', { x: Math.random(), y: Math.random() }); await wait(60); }
+  await wait(2500);
+  const entropy = Array.from({ length: 64 }, () => Math.floor(Math.random() * 1e6));
+  four[0].sock.emit('shuffle-done', { entropy, washMs: 2600, ops: [{ t: 'r' }, { t: 'r' }] });
+  const cutPhase = await waitFor(four[3].sock, 'state-update', d => d.phase === 'cut', 3000);
+  ok(!!cutPhase, 'the shuffle moves the game to the cut');
+  four[3].sock.emit('cut-done', { segments: [[12, 32], [0, 12]] });
+  const trumpPhase = await waitFor(four[1].sock, 'state-update', d => d.phase === 'trump', 8000);
+  await wait(150);
+  ok(!!trumpPhase, 'after the first deal the caller chooses trump');
+  const partner = stateOf[3];
+  ok(partner && partner.phase === 'trump' && partner.myHand.length === 0 && partner.myHandLocked === 4,
+    'the partner of the caller receives no cards, only a locked count of 4');
+  ok(stateOf[1] && stateOf[1].myHand.length === 4 && stateOf[1].myHandLocked === 0, 'the caller sees their 4 cards');
+  ok(stateOf[0] && stateOf[0].myHand.length === 4 && stateOf[2] && stateOf[2].myHand.length === 4,
+    'both opponents see their own 4 cards before trump');
+
+  // A reconnect during the wait must not reveal the partner's hand either.
+  four[3].sock.disconnect();
+  await wait(300);
+  const partnerBack = connect({ auth: { token: four[3].token } });
+  const pb = await waitEvent(partnerBack, 'state-update', 3000);
+  ok(pb && pb.phase === 'trump' && pb.myHand.length === 0 && pb.myHandLocked === 4,
+    'reconnecting during the trump call still hides the partner hand');
+
+  const unlocked = waitFor(partnerBack, 'state-update', d => d.phase !== 'trump', 3000);
+  four[1].sock.emit('choose-trump', { suit: '♠' });
+  const after = await unlocked;
+  ok(after && after.myHand.length === 4 && after.myHandLocked === 0 && after.trump === '♠',
+    'the partner hand unlocks the moment trump is called');
+  partnerBack.close();
+  four.forEach(p => p.sock.close());
+  await wait(300);
+
   // --- idle reaper (on a server with very short idle timeouts) ---
   server.kill();
   await wait(400);

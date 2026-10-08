@@ -27,6 +27,21 @@ function mulberry(seed) {
   };
 }
 
+// Shuffle, cut, deal and call trump until the hand is playable. A trump
+// shortage (either team holding fewer than 2) throws the hand in for a redeal.
+function dealToPlay(gs, trump) {
+  for (let attempt = 0; attempt < 50; attempt++) {
+    shuf(gs);
+    game.applyCut(gs, [[16, 32], [0, 16]]);
+    game.dealStage1(gs);
+    game.chooseTrump(gs, trump || '♠');
+    game.dealStage2(gs);
+    if (gs.phase === 'play') return gs;
+    game.redealRound(gs);
+  }
+  throw new Error('no playable deal in 50 attempts');
+}
+
 console.log('game.js tests\n');
 
 // ---- beats() truth table ----
@@ -159,21 +174,26 @@ console.log('game.js tests\n');
   assert(gs.trumpCallerSeat === (gs.dealer + 1) % 4, 'trump caller is next to the dealer');
   assert(gs.breakerSeat === (gs.dealer + 3) % 4, 'breaker is on the other side');
 
-  shuf(gs);
-  assert(gs.currentSeat === gs.breakerSeat, 'breaker acts in the cut phase');
-  game.applyCut(gs, [[14, 32], [0, 14]]);
-  const postCutDeck = gs.deck.slice();
+  // Repeat the deal if a trump shortage throws the hand in (about 1 in 27).
+  for (let attempt = 0; attempt < 50; attempt++) {
+    shuf(gs);
+    assert(gs.currentSeat === gs.breakerSeat, 'breaker acts in the cut phase');
+    game.applyCut(gs, [[14, 32], [0, 14]]);
+    const postCutDeck = gs.deck.slice();
 
-  game.dealStage1(gs);
-  assert(gs.phase === 'trump' && gs.currentSeat === gs.trumpCallerSeat, 'stage 1 hands the choice to the caller');
-  gs.players.forEach(p => assert(p.hand.length === 4, 'stage 1: 4 cards each'));
-  const callerGot = gs.players[gs.trumpCallerSeat].hand.map(key).sort().join();
-  const expected = postCutDeck.slice(0, 4).map(key).sort().join();
-  assert(callerGot === expected, 'trump caller got the top 4 cards');
+    game.dealStage1(gs);
+    assert(gs.phase === 'trump' && gs.currentSeat === gs.trumpCallerSeat, 'stage 1 hands the choice to the caller');
+    gs.players.forEach(p => assert(p.hand.length === 4, 'stage 1: 4 cards each'));
+    const callerGot = gs.players[gs.trumpCallerSeat].hand.map(key).sort().join();
+    const expected = postCutDeck.slice(0, 4).map(key).sort().join();
+    assert(callerGot === expected, 'trump caller got the top 4 cards');
 
-  game.chooseTrump(gs, game.aiPickTrump(gs, gs.trumpCallerSeat));
-  assert(gs.phase === 'dealing2', 'trump lock leads to the second deal');
-  game.dealStage2(gs);
+    game.chooseTrump(gs, game.aiPickTrump(gs, gs.trumpCallerSeat));
+    assert(gs.phase === 'dealing2', 'trump lock leads to the second deal');
+    game.dealStage2(gs);
+    if (gs.phase !== 'redeal') break;
+    game.redealRound(gs);
+  }
   assert(gs.phase === 'play' && gs.currentSeat === gs.trumpCallerSeat, 'caller leads the first trick');
   gs.players.forEach(p => assert(p.hand.length === 8, 'stage 2: 8 cards each'));
   assert(gs.deck.length === 0, 'deck empty after the full deal');
@@ -213,11 +233,7 @@ console.log('game.js tests\n');
 
 // ---- scoring, including the announce-Kapothi variant ----
 function fabricateRound(gs, tricksBySeat, kapothiTeam) {
-  shuf(gs);
-  game.applyCut(gs, [[16, 32], [0, 16]]);
-  game.dealStage1(gs);
-  game.chooseTrump(gs, '♠');
-  game.dealStage2(gs);
+  dealToPlay(gs);
   gs.players.forEach((p, i) => { p.tricks = tricksBySeat[i]; p.hand = []; });
   if (kapothiTeam != null) gs.kapothiTeam = kapothiTeam;
   gs.wonStacks = [];
@@ -272,12 +288,7 @@ function fabricateRound(gs, tricksBySeat, kapothiTeam) {
 // ---- kapothi decision fires only on six straight tricks ----
 {
   const setup = (t0, t2) => {
-    const gs = game.createGame([{ id: 'x', name: 'H', seat: 0 }], 4);
-    shuf(gs);
-    game.applyCut(gs, [[16, 32], [0, 16]]);
-    game.dealStage1(gs);
-    game.chooseTrump(gs, '♠');
-    game.dealStage2(gs);
+    const gs = dealToPlay(game.createGame([{ id: 'x', name: 'H', seat: 0 }], 4));
     gs.players[0].tricks = t0;
     gs.players[2].tricks = t2;
     gs.players[1].tricks = 5 - t0 - t2;
@@ -331,12 +342,7 @@ function fabricateRound(gs, tricksBySeat, kapothiTeam) {
 
 // ---- a full trick locks out extra plays until endTrick ----
 {
-  const gs = game.createGame([{ id: 'x', name: 'H', seat: 0 }], 4);
-  shuf(gs);
-  game.applyCut(gs, [[16, 32], [0, 16]]);
-  game.dealStage1(gs);
-  game.chooseTrump(gs, '♠');
-  game.dealStage2(gs);
+  const gs = dealToPlay(game.createGame([{ id: 'x', name: 'H', seat: 0 }], 4));
   for (let i = 0; i < 4; i++) game.playCard(gs, gs.currentSeat, game.aiPickCard(gs, gs.currentSeat));
   assert(gs.trickJustEnded, 'trick complete after 4 plays');
   let threw = false;
@@ -349,12 +355,7 @@ function fabricateRound(gs, tricksBySeat, kapothiTeam) {
 
 // ---- illegal play throws ----
 {
-  const gs = game.createGame([{ id: 'x', name: 'H', seat: 0 }], 4);
-  shuf(gs);
-  game.applyCut(gs, [[16, 32], [0, 16]]);
-  game.dealStage1(gs);
-  game.chooseTrump(gs, '♠');
-  game.dealStage2(gs);
+  const gs = dealToPlay(game.createGame([{ id: 'x', name: 'H', seat: 0 }], 4));
   game.playCard(gs, gs.currentSeat, 0);
   const seat = gs.currentSeat;
   const lead = gs.leadSuit;
@@ -371,7 +372,97 @@ function fabricateRound(gs, tricksBySeat, kapothiTeam) {
   }
 }
 
+// ---- redeal: a team with fewer than 2 trumps throws the hand in ----
+{
+  // Deal positions with dealer 0: the caller is seat 1, and each packet of 4
+  // goes caller, caller+1, caller+2, caller+3. Team A (seats 0 and 2) sits at
+  // positions 4-7, 12-15, 20-23 and 28-31 of the deck.
+  const teamAPositions = new Set();
+  [4, 12, 20, 28].forEach(start => { for (let i = 0; i < 4; i++) teamAPositions.add(start + i); });
+
+  // Stack a deck so team A ends up with exactly `teamATrumps` spades.
+  const stacked = (gs, teamATrumps) => {
+    const spades = gs.deck.filter(c => c.s === '♠');
+    const others = gs.deck.filter(c => c.s !== '♠');
+    const deck = [];
+    let aSpades = teamATrumps;
+    let bSpades = 8 - teamATrumps;
+    for (let pos = 0; pos < 32; pos++) {
+      const isA = teamAPositions.has(pos);
+      if (isA && aSpades > 0) { deck.push(spades.pop()); aSpades--; }
+      else if (!isA && bSpades > 0) { deck.push(spades.pop()); bSpades--; }
+      else deck.push(others.pop());
+    }
+    gs.deck = deck;
+    gs.phase = 'dealing1';
+    return gs;
+  };
+  const fresh = () => game.createGame([{ id: 'x', name: 'H', seat: 0 }], 4);
+
+  for (const short of [0, 1]) {
+    const gs = stacked(fresh(), short);
+    const identity = new Set(gs.deck);
+    gs.players.forEach(p => { p.score = p.team === 0 ? 4 : 6; });
+    gs.drawBonus = 1;
+    game.dealStage1(gs);
+    game.chooseTrump(gs, '♠');
+    game.dealStage2(gs);
+    assert(game.teamTrumpCounts(gs).join() === [short, 8 - short].join(), 'stacked deal gives team A ' + short + ' trump(s)');
+    assert(gs.phase === 'redeal', short + ' trump(s) for a team forces a redeal');
+    assert(gs.redealInfo && gs.redealInfo.shortTeam === 0 && gs.redealInfo.n === 1, 'redeal info names the short team');
+    let threw = false;
+    try { game.playCard(gs, gs.trumpCallerSeat, 0); } catch (e) { threw = true; }
+    assert(threw, 'no card can be played on a void hand');
+
+    const before = { dealer: gs.dealer, breaker: gs.breakerSeat, caller: gs.trumpCallerSeat, round: gs.roundNum };
+    game.redealRound(gs);
+    assert(gs.phase === 'shuffle' && gs.currentSeat === before.dealer, 'redeal returns to the same dealer to reshuffle');
+    assert(gs.dealer === before.dealer && gs.breakerSeat === before.breaker && gs.trumpCallerSeat === before.caller,
+      'the same dealer, breaker and trump caller act again');
+    assert(gs.roundNum === before.round, 'a redeal does not advance the round');
+    assert(gs.players.every(p => p.score === (p.team === 0 ? 4 : 6)) && gs.drawBonus === 1, 'a redeal scores nothing');
+    assert(gs.trump === null && gs.players.every(p => p.hand.length === 0 && p.tricks === 0), 'hands and trump are cleared');
+    assert(gs.deck.length === 32 && gs.deck.every(c => identity.has(c)), 'the same 32 physical cards form the new deck');
+    assert(gs.redealsThisRound === 1, 'the redeal is counted for the round');
+    const logged = gs.history.filter(h => h.type === 'redeal');
+    assert(logged.length === 1 && logged[0].shortTeam === 0 && logged[0].counts[0] === short, 'the redeal is logged');
+    let again = false;
+    try { game.redealRound(gs); } catch (e) { again = true; }
+    assert(again, 'redealRound outside the redeal phase throws');
+
+    dealToPlay(gs);
+    assert(gs.phase === 'play' && gs.trumpCallerSeat === before.caller, 'after the redeal the hand plays normally');
+  }
+
+  // Exactly two trumps is enough to play on.
+  const two = stacked(fresh(), 2);
+  game.dealStage1(two);
+  game.chooseTrump(two, '♠');
+  game.dealStage2(two);
+  assert(two.phase === 'play', 'two trumps between partners is a playable hand');
+
+  // Over many random deals the redeal fires exactly when a team is short.
+  let redeals = 0;
+  let mismatches = 0;
+  for (let i = 0; i < 1000; i++) {
+    const gs = fresh();
+    shuf(gs);
+    game.applyCut(gs, [[16, 32], [0, 16]]);
+    game.dealStage1(gs);
+    game.chooseTrump(gs, game.SUITS[i % 4]);
+    game.dealStage2(gs);
+    const counts = game.teamTrumpCounts(gs);
+    const short = Math.min(counts[0], counts[1]) < 2;
+    if (short) redeals++;
+    if (short !== (gs.phase === 'redeal')) mismatches++;
+  }
+  assert(mismatches === 0, 'redeal fires if and only if a team holds fewer than 2 trumps');
+  assert(redeals > 0 && redeals < 150, 'redeals are uncommon (' + redeals + ' in 1000 deals)');
+  console.log('  redeal: forced, logged, same roles, no score, iff short (' + redeals + '/1000 random deals)');
+}
+
 // ---- full games to completion, every mode ----
+let redeals4p = 0;
 for (let run = 1; run <= 3; run++) {
   const gs = game.createGame([{ id: 'x', name: 'Host', seat: 0 }], 4);
   let guard = 0;
@@ -383,6 +474,7 @@ for (let run = 1; run <= 3; run++) {
     } else if (gs.phase === 'dealing1') game.dealStage1(gs);
     else if (gs.phase === 'trump') game.chooseTrump(gs, game.aiPickTrump(gs, gs.currentSeat));
     else if (gs.phase === 'dealing2') game.dealStage2(gs);
+    else if (gs.phase === 'redeal') { redeals4p++; game.redealRound(gs); }
     else if (gs.phase === 'kapothi') game.decideKapothi(gs, game.aiDecideKapothi(gs, gs.currentSeat));
     else if (gs.roundJustEnded) { if (!gs.gameOver) game.nextRound(gs); }
     else {
@@ -392,6 +484,15 @@ for (let run = 1; run <= 3; run++) {
   }
   assert(gs.gameOver, '4p run ' + run + ' reaches game over');
   assert(gs.players.some(p => p.score >= 10), '4p run ' + run + ': winner reached 10 tokens');
+  // The match log tells the whole story: every scored round, in order,
+  // ending on the final score.
+  const rounds = gs.history.filter(h => h.type === 'round');
+  assert(rounds.length === gs.roundNum, '4p run ' + run + ': one log entry per round');
+  assert(rounds.every((h, i) => h.round === i + 1), '4p run ' + run + ': log rounds in order');
+  const last = rounds[rounds.length - 1];
+  const finalScore = [0, 1].map(t => gs.players.find(p => p.team === t).score);
+  assert(last && last.scoreAfter.join() === finalScore.join(), '4p run ' + run + ': log ends on the final score');
+  assert(rounds.every(h => h.tricksBySeat.reduce((a, b) => a + b, 0) === 8), '4p run ' + run + ': 8 tricks per logged round');
   console.log('  4p run ' + run + ': finished, winner ' + gs.gameWinner);
 }
 
@@ -422,6 +523,7 @@ for (const mode of [2, 3]) {
   }
 }
 console.log('  2p/3p auto-deal: every player holds all suits ok');
+console.log('  (' + redeals4p + ' redeal(s) occurred during the full 4p games)');
 
 console.log(failures === 0 ? '\nALL TESTS PASSED' : '\n' + failures + ' FAILURES');
 process.exit(failures === 0 ? 0 : 1);

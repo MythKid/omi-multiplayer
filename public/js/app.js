@@ -218,9 +218,10 @@
       var myTurn = state.phase === 'play' && state.currentSeat === state.mySeat
         && state.trick.length < state.mode;
 
-      // Fresh cards flip into the hand after each deal stage
+      // Fresh cards flip into the hand after each deal stage, including the
+      // moment a waiting partner's cards unlock once trump is called.
       var dealIn = state.myHand.length > Math.max(0, prevMyHandLen)
-        && (state.phase === 'trump' || state.phase === 'play');
+        && (state.phase === 'trump' || state.phase === 'dealing2' || state.phase === 'play');
 
       state.players.forEach(function (p, i) {
         var off = relativeOffset(p.seat, state.mySeat, state.mode);
@@ -242,7 +243,29 @@
         var hand = document.createElement('div');
         hand.className = 'hand';
 
-        if (i === state.mySeat) {
+        var handWrap = null;
+        if (i === state.mySeat && state.myHandLocked > 0) {
+          // Partner of the trump caller: the cards stay face-down behind a
+          // red cross until trump is called (the server withholds them).
+          hand.classList.add('mine', 'locked');
+          for (var lc = 0; lc < state.myHandLocked; lc++) hand.appendChild(makeCardEl(null, false));
+          handWrap = document.createElement('div');
+          handWrap.className = 'locked-wrap';
+          handWrap.appendChild(hand);
+          var lock = document.createElement('div');
+          lock.className = 'hand-lock';
+          lock.setAttribute('role', 'img');
+          lock.setAttribute('aria-label', 'Your cards stay hidden until your partner calls trumps');
+          var cross = document.createElement('span');
+          cross.className = 'lock-x';
+          cross.textContent = '✕';
+          var waitLbl = document.createElement('span');
+          waitLbl.className = 'lock-w';
+          waitLbl.textContent = 'WAIT';
+          lock.appendChild(cross);
+          lock.appendChild(waitLbl);
+          handWrap.appendChild(lock);
+        } else if (i === state.mySeat) {
           hand.classList.add('mine');
           state.myHand.forEach(function (card, idx) {
             var el = makeCardEl(card, true);
@@ -279,7 +302,7 @@
 
         zone.appendChild(tag);
         zone.appendChild(tricksEl);
-        zone.appendChild(hand);
+        zone.appendChild(handWrap || hand);
         if (i === state.mySeat) fitMyHand(hand);
       });
 
@@ -525,6 +548,36 @@
         show();
       }
 
+      if (state.phase === 'redeal' && state.redeal) {
+        var rd = state.redeal;
+        var shortN = rd.counts[rd.shortTeam];
+        var nameOf = function (seat) { return state.players[seat] ? state.players[seat].name : '?'; };
+        addTitle('REDEAL');
+        var rmsg = document.createElement('div');
+        rmsg.className = 'ap-wait';
+        rmsg.textContent = 'Team ' + 'AB'[rd.shortTeam] + ' holds only ' + shortN + ' trump' +
+          (shortN === 1 ? '' : 's') + ' between them, so the hand is thrown in.';
+        ap.appendChild(rmsg);
+        var rhint = document.createElement('div');
+        rhint.className = 'ap-hint';
+        rhint.textContent = nameOf(state.dealer) + ' reshuffles, ' + nameOf(state.breakerSeat) +
+          ' cuts and ' + nameOf(state.trumpCallerSeat) + ' calls trumps again.';
+        ap.appendChild(rhint);
+        show();
+        return;
+      }
+
+      if (state.phase === 'trump' && state.myHandLocked > 0) {
+        addTitle('WAIT FOR TRUMPS');
+        var lmsg = document.createElement('div');
+        lmsg.className = 'ap-wait';
+        lmsg.textContent = 'Your partner ' + currentName + ' is choosing trumps. ' +
+          'Your cards unlock once trumps are called.';
+        ap.appendChild(lmsg);
+        show();
+        return;
+      }
+
       if (state.phase === 'trump' && myTurn) {
         addTitle('CHOOSE TRUMP SUIT');
         var row = document.createElement('div');
@@ -539,6 +592,15 @@
           row.appendChild(b);
         });
         ap.appendChild(row);
+        if (state.mode === 4) {
+          var partner = state.players[(state.mySeat + 2) % 4];
+          if (partner && !partner.ai) {
+            var phint = document.createElement('div');
+            phint.className = 'ap-hint';
+            phint.textContent = partner.name + ' cannot see their cards until you call trumps.';
+            ap.appendChild(phint);
+          }
+        }
         show();
       } else if (state.phase === 'play' && myTurn) {
         var turn = document.createElement('div');
@@ -779,7 +841,9 @@
 
     function renderStage(state) {
       var active = state.mode === 4 && STAGE_PHASES.indexOf(state.phase) !== -1;
-      var key = active ? (state.phase + ':' + state.roundNum) : 'off';
+      // The redeal count is part of the key, so a thrown-in hand rebuilds the
+      // shuffle stage even though the round number stays the same.
+      var key = active ? (state.phase + ':' + state.roundNum + ':' + (state.redealCount || 0)) : 'off';
       if (key === stageKey) return; // don't rebuild mid-interaction
       stageKey = key;
       teardownStage();
@@ -1400,6 +1464,7 @@
     var prevTrumpVal = null;
     var prevKapTeam = -1;
     var prevOver = false;
+    var prevRedeal = false;
 
     function splashShow(text, cls) {
       var sp = $('splash');
@@ -1441,6 +1506,12 @@
         Sound.thump();
       }
       prevKapTeam = state.kapothiTeam != null ? state.kapothiTeam : -1;
+
+      if (state.redeal && !prevRedeal) {
+        splashShow('REDEAL', 'gold');
+        Sound.thump();
+      }
+      prevRedeal = !!state.redeal;
 
       if (state.gameOver && !prevOver) {
         Sound.fanfare();
@@ -1726,6 +1797,7 @@
       prevTrumpVal = null;
       prevKapTeam = -1;
       prevOver = false;
+      prevRedeal = false;
       resultsChosen = false;
       myState = null;
       $('overlay').style.display = 'none';

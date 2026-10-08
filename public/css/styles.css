@@ -1521,6 +1521,15 @@
     color: #9a8770;
   }
   .info-credit a { color: #e8c547; text-decoration: none; }
+  .info-version { margin-top: 6px; font-family: 'Cinzel', serif; letter-spacing: 2px; font-size: 11px; }
+  .info-new {
+    border: 1px solid rgba(232,197,71,.45);
+    background: rgba(232,197,71,.07);
+    border-radius: 10px;
+    padding: 2px 14px 8px;
+    margin-bottom: 4px;
+  }
+  .info-new .info-h { margin-top: 10px; }
   .info-credit a:hover { text-decoration: underline; }
 
   /* ---------- Compact screens (phones / short landscape) ---------- */

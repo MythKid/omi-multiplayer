@@ -3,6 +3,7 @@
 const express = require('express');
 const leaderboard = require('../services/leaderboardService');
 const gameManager = require('../services/gameManager');
+const { version } = require('../package.json');
 
 const router = express.Router();
 
@@ -14,7 +15,7 @@ const limitOf = (req) => {
 // Health check for platform probes (Koyeb, load balancers, uptime monitors).
 // Exposed at both /api/health and /api/healthz for convention compatibility.
 function health(req, res) {
-  res.json({ ok: true, uptime: Math.round(process.uptime()) });
+  res.json({ ok: true, version, uptime: Math.round(process.uptime()) });
 }
 router.get('/health', health);
 router.get('/healthz', health);

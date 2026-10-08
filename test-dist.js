@@ -25,7 +25,7 @@ console.log('[1] Files a fresh clone must contain');
 const REQUIRED = [
   'package.json', 'package-lock.json', 'server.js', 'game.js', 'test.js',
   'test-dist.js', 'test-leaderboard.js', 'test-rating.js', 'test-sockets.js',
-  'README.md', 'LICENSE', '.gitignore', '.env.example',
+  'README.md', 'CHANGELOG.md', 'LICENSE', '.gitignore', '.env.example',
   'config/index.js', 'utils/logger.js', 'utils/network.js', 'utils/sanitize.js',
   'database/index.js', 'database/sqliteStore.js', 'database/jsonStore.js',
   'services/gameManager.js', 'services/table.js', 'services/chat.js',
@@ -69,6 +69,12 @@ ok(pkg.scripts && pkg.scripts.start === 'node server.js', 'has a start script');
 ok(pkg.scripts && pkg.scripts.test, 'has a test script');
 ok(pkg.scripts && pkg.scripts.build, 'has a build script');
 ok(pkg.engines && pkg.engines.node, 'declares a supported Node version (engines.node)');
+ok(/^\d+\.\d+\.\d+$/.test(pkg.version), 'version is semver (' + pkg.version + ')');
+const lock = JSON.parse(read('package-lock.json'));
+ok(lock.version === pkg.version && lock.packages && lock.packages[''] && lock.packages[''].version === pkg.version,
+  'package-lock.json carries the same version');
+ok(read('CHANGELOG.md').includes('## ' + pkg.version + ' '), 'CHANGELOG.md has notes for ' + pkg.version);
+ok(read('public/index.html').includes('v' + pkg.version + '<'), 'the in-game version label shows ' + pkg.version);
 ['express', 'socket.io', 'chalk', 'qrcode', 'qrcode-terminal'].forEach(d =>
   ok(pkg.dependencies && pkg.dependencies[d], 'runtime dependency declared: ' + d));
 
@@ -127,7 +133,7 @@ ok(!/require\(['"](fs|net|http|express|socket\.io|dgram)['"]\)/.test(gameSrc),
 // No stray em or en dashes, and no AI-tool signatures, in shipped text.
 const SHIPPED = [
   'server.js', 'game.js', 'test.js', 'public/index.html', 'public/js/app.js',
-  'public/css/styles.css', 'README.md', 'package.json',
+  'public/css/styles.css', 'README.md', 'CHANGELOG.md', 'package.json',
   'services/gameManager.js', 'services/table.js', 'services/chat.js', 'services/leaderboardService.js',
   'services/rating.js', 'services/identity.js', 'database/sqliteStore.js', 'database/jsonStore.js',
   'public/sw.js', 'public/js/chat.js', 'public/js/leaderboard.js', 'routes/api.js', 'config/index.js',
@@ -207,8 +213,11 @@ async function runSmoke() {
   for (const p of ['/api/health', '/api/healthz']) {
     const health = await request(p);
     let healthOk = false;
-    try { healthOk = health.status === 200 && JSON.parse(health.body).ok === true; } catch (e) {}
-    ok(healthOk, 'GET ' + p + ' returns ok');
+    try {
+      const h = JSON.parse(health.body);
+      healthOk = health.status === 200 && h.ok === true && h.version === pkg.version;
+    } catch (e) {}
+    ok(healthOk, 'GET ' + p + ' returns ok with version ' + pkg.version);
   }
 
   const board = await request('/api/leaderboard');

@@ -27,6 +27,7 @@ Live at **[omi.nodenull.org](https://omi.nodenull.org)**. Built by **Methindu Da
 - [Project layout](#project-layout)
 - [Testing](#testing)
 - [Roadmap](#roadmap)
+- [Changelog](#changelog)
 - [Known limits](#known-limits)
 - [License](#license)
 - [Troubleshooting](#troubleshooting)
@@ -716,6 +717,7 @@ test-rating.js                Rating, grade, and name-claim unit tests
 test-leaderboard.js           Leaderboard tests, run against SQLite and JSON
 test-sockets.js               Socket integration tests (tables, chat, partner wait, ...)
 test-dist.js                  Distribution + live-server checks (npm run test:dist)
+CHANGELOG.md                  Release notes for every version
 .env.example                  Documented environment variables
 ```
 
@@ -768,6 +770,12 @@ This project is source-available, not open source: the code is here to read, clo
 run locally for evaluation, but redistribution, commercial use, and public redeployment
 are reserved. See [LICENSE](LICENSE) for the exact terms. If you would like to use part
 of this project elsewhere, reach out through [nodenull.org](https://nodenull.org).
+
+## Changelog
+
+The current version is **2.0.0**. Release notes for every version are in
+[CHANGELOG.md](CHANGELOG.md), and the in-game How to Play panel opens with a short
+"What's new" summary. `GET /api/health` reports the running version.
 
 ## Known limits
 

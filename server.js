@@ -18,6 +18,7 @@ const network = require('./utils/network');
 const apiRoutes = require('./routes/api');
 const gameManager = require('./services/gameManager');
 const db = require('./database');
+const { version } = require('./package.json');
 
 // A stray exception in one request or timer must never take the whole server
 // down and disconnect everyone mid-game.
@@ -149,13 +150,13 @@ server.on('error', (err) => {
 
 function printStartupBanner() {
   if (config.isProduction) {
-    logger.info(`OMI server listening on port ${config.port} (${config.nodeEnv}, ${config.maxSlots} tables)`);
+    logger.info(`OMI v${version} listening on port ${config.port} (${config.nodeEnv}, ${config.maxSlots} tables)`);
     return;
   }
   // Development / LAN: friendly banner with a scannable QR code.
   const chalk = require('chalk');
   const url = network.getJoinURL();
-  logger.print(chalk.green.bold('\n  OMI server is running with ' + config.maxSlots + ' tables.\n'));
+  logger.print(chalk.green.bold('\n  OMI v' + version + ' is running with ' + config.maxSlots + ' tables.\n'));
   logger.print(chalk.white('  On this computer:  ') + chalk.cyan(`http://localhost:${config.port}`));
   logger.print(chalk.white('  On the network:    ') + chalk.cyan.bold(url));
   const host = network.getJoinHost();

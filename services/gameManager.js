@@ -6,6 +6,7 @@ const logger = require('../utils/logger');
 const { sanitizeName } = require('../utils/sanitize');
 const Table = require('./table');
 const leaderboard = require('./leaderboardService');
+const assets = require('../utils/assets');
 
 // Bumped whenever the client/server event contract changes. A client built
 // for another version is told to reload so it picks up matching assets.
@@ -217,8 +218,14 @@ function handleConnection(socket) {
 
   const auth = (socket.handshake && socket.handshake.auth) || {};
   if (auth.v != null && Number(auth.v) !== PROTOCOL_VERSION) {
-    socket.emit('version-mismatch', { version: PROTOCOL_VERSION });
+    socket.emit('version-mismatch', { version: PROTOCOL_VERSION, build: assets.currentBuild() });
     return;
+  }
+  // Same protocol but an older page (a tab left open across a deploy, or a
+  // cached copy): ask it to reload so it runs the current client. It may
+  // carry on meanwhile, so a failed reload never locks anyone out.
+  if (auth.v != null && auth.build !== assets.currentBuild()) {
+    socket.emit('version-mismatch', { version: PROTOCOL_VERSION, build: assets.currentBuild() });
   }
 
   // A known token reclaims its seat at its table; a stale one is told to

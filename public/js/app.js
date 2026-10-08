@@ -8,21 +8,33 @@
     if (fontCss) fontCss.media = 'all';
 
     // Register the service worker so the game is installable and loads offline.
+    // The browser must never take the worker script itself from its HTTP
+    // cache, and checks for a new one on every visit.
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () {
-        navigator.serviceWorker.register('/sw.js').catch(function () { /* non-fatal */ });
+        navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
+          .then(function (reg) { return reg.update(); })
+          .catch(function () { /* non-fatal */ });
       });
     }
 
     // Must match the server's PROTOCOL_VERSION. A mismatch means this page
     // is a stale cached copy, so it reloads to fetch the current client.
     var PROTOCOL = 2;
+    // Fingerprint of this page and its files, stamped in by the server. A
+    // server on a newer build asks this page to reload.
+    var BUILD = (document.querySelector('meta[name="omi-build"]') || {}).content || '';
+    function authWith(token) {
+      var a = { v: PROTOCOL, build: BUILD };
+      if (token) a.token = token;
+      return a;
+    }
 
     // Reconnect support: a session token identifies our seat across a refresh
     // or a brief network drop. Present it on connect so the server can resume.
     var sessionToken = null;
     try { sessionToken = sessionStorage.getItem('omi-token'); } catch (e) {}
-    var socket = io({ auth: sessionToken ? { token: sessionToken, v: PROTOCOL } : { v: PROTOCOL } });
+    var socket = io({ auth: authWith(sessionToken) });
     var SNAMES = { '♠': 'Spades', '♥': 'Hearts', '♦': 'Diamonds', '♣': 'Clubs' };
     var SUITS = ['♠', '♥', '♦', '♣'];
 
@@ -1932,7 +1944,7 @@
     function clearSession() {
       try { sessionStorage.removeItem('omi-token'); } catch (e) {}
       sessionToken = null;
-      socket.auth = { v: PROTOCOL };
+      socket.auth = authWith(null);
     }
 
     // Leave whatever table view is showing and go to the tables screen.
@@ -2022,12 +2034,20 @@
       }
     });
 
-    socket.on('version-mismatch', function () {
-      // One reload fetches the current client; never loop on it.
+    // The server runs a newer build than this page. Reload once to pick it up
+    // (the page is never cached and its files are fingerprinted, so one
+    // reload is enough). If this tab already reloaded for that build and is
+    // still behind, something in between is caching hard: say so instead of
+    // looping.
+    socket.on('version-mismatch', function (data) {
+      var target = (data && data.build) || 'new';
       var flag = null;
       try { flag = sessionStorage.getItem('omi-reloaded'); } catch (e) {}
-      if (flag) return;
-      try { sessionStorage.setItem('omi-reloaded', '1'); } catch (e) {}
+      if (flag === target) {
+        showToast('A new version of OMI is out. Please refresh the page to update.', 8000);
+        return;
+      }
+      try { sessionStorage.setItem('omi-reloaded', target); } catch (e) {}
       window.location.reload();
     });
 
@@ -2157,7 +2177,7 @@
     socket.on('session', function (data) {
       if (!data || !data.token) return;
       sessionToken = data.token;
-      socket.auth = { token: data.token, v: PROTOCOL };
+      socket.auth = authWith(data.token);
       try { sessionStorage.setItem('omi-token', data.token); } catch (e) {}
     });
 

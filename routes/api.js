@@ -2,6 +2,7 @@
 // services. New endpoints (accounts, stats, history, ...) slot in here.
 const express = require('express');
 const leaderboard = require('../services/leaderboardService');
+const gameManager = require('../services/gameManager');
 
 const router = express.Router();
 
@@ -22,6 +23,11 @@ router.get('/leaderboard', (req, res) => {
 // Lightweight aggregate stats derived from the leaderboard.
 router.get('/stats', (req, res) => {
   res.json(leaderboard.getStats());
+});
+
+// Live table summaries (the same data the tables screen shows).
+router.get('/tables', (req, res) => {
+  res.json({ tables: gameManager.tableSummaries() });
 });
 
 module.exports = router;

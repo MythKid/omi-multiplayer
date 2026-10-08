@@ -14,24 +14,37 @@
       });
     }
 
+    // Must match the server's PROTOCOL_VERSION. A mismatch means this page
+    // is a stale cached copy, so it reloads to fetch the current client.
+    var PROTOCOL = 2;
+
     // Reconnect support: a session token identifies our seat across a refresh
     // or a brief network drop. Present it on connect so the server can resume.
     var sessionToken = null;
     try { sessionToken = sessionStorage.getItem('omi-token'); } catch (e) {}
-    var socket = io(sessionToken ? { auth: { token: sessionToken } } : undefined);
+    var socket = io({ auth: sessionToken ? { token: sessionToken, v: PROTOCOL } : { v: PROTOCOL } });
     var SNAMES = { '♠': 'Spades', '♥': 'Hearts', '♦': 'Diamonds', '♣': 'Clubs' };
     var SUITS = ['♠', '♥', '♦', '♣'];
 
     var myState = null;
     var mySeat = -1;
     var isHost = false;
-    var hasJoined = false;
     var msgTimer = null;
+    var currentScreen = 'join';
+    var atTable = false;       // seated at a table (lobby, game or results)
+    var lastTables = [];
+    var resultsChosen = false; // already answered the results screen
+    var myName = '';
+    try { myName = localStorage.getItem('omi-name') || ''; } catch (e) {}
+    // An invite link (?table=N) joins that table as soon as a name is set.
+    var wantedTable = Number(new URLSearchParams(window.location.search).get('table')) || 0;
 
     function $(id) { return document.getElementById(id); }
 
     function showScreen(name) {
+      currentScreen = name;
       $('screen-join').style.display = name === 'join' ? 'flex' : 'none';
+      $('screen-tables').style.display = name === 'tables' ? 'flex' : 'none';
       $('screen-lobby').style.display = name === 'lobby' ? 'flex' : 'none';
       $('screen-game').style.display = name === 'game' ? 'block' : 'none';
     }
@@ -1491,28 +1504,20 @@
       oldBtn.parentNode.replaceChild(btn, oldBtn);
       btn.disabled = false;
 
-      // Drop any leaderboard button left over from a previous overlay
-      var oldLb = document.getElementById('ov-leaderboard');
-      if (oldLb) oldLb.remove();
-
       if (state.gameOver) {
-        btn.textContent = 'BACK TO LOBBY';
-        $('ov-waiting').textContent = '';
-        btn.addEventListener('click', function () {
-          socket.disconnect();
-          window.location.reload();
-        });
-        // 4-player results are recorded, so offer a look at the board.
-        if (state.mode === 4) {
-          var lbBtn = document.createElement('button');
-          lbBtn.id = 'ov-leaderboard';
-          lbBtn.className = 'btn-secondary';
-          lbBtn.style.marginTop = '10px';
-          lbBtn.textContent = '🏆 VIEW LEADERBOARD';
-          lbBtn.addEventListener('click', openLeaderboard);
-          btn.parentNode.insertBefore(lbBtn, $('ov-waiting'));
-        }
+        // Stay for a rematch at this table, or leave it. The table returns
+        // to its lobby once everyone has chosen (or after a short wait).
+        btn.style.display = 'none';
+        $('ov-actions').style.display = 'flex';
+        $('btn-stay').disabled = resultsChosen;
+        $('ov-leaderboard').style.display = state.mode === 4 ? '' : 'none';
+        var r = state.results || { stayed: 0, total: 0 };
+        $('ov-waiting').textContent = resultsChosen
+          ? 'Waiting for the others… ' + r.stayed + '/' + r.total + ' staying'
+          : (r.stayed ? r.stayed + ' of ' + r.total + ' want a rematch' : '');
       } else {
+        btn.style.display = '';
+        $('ov-actions').style.display = 'none';
         btn.textContent = 'READY FOR NEXT ROUND';
         $('ov-waiting').textContent = state.readyCount > 0
           ? 'Waiting for ' + state.readyCount + '/' + state.totalPlayers + ' players…'
@@ -1581,6 +1586,7 @@
     }
 
     function renderLobby(data) {
+      $('lobby-title').textContent = (data.label || 'TABLE').toUpperCase() + ' · WAITING ROOM';
       var wrap = $('lobby-players');
       wrap.innerHTML = '';
 
@@ -1643,9 +1649,9 @@
         $('lobby-wait-msg').style.display = 'block';
       }
 
-      // Only the host needs the join details; other players are already in.
+      // This table's own invite: anyone seated can share it with a friend.
       var ipHint = $('lobby-ip-hint');
-      if (isHost && data.serverIP) {
+      if (data.joinURL) {
         ipHint.style.display = 'block';
         ipHint.innerHTML = '';
 
@@ -1668,19 +1674,21 @@
 
         var ip = document.createElement('span');
         ip.className = 'ip';
-        ip.textContent = data.joinURL || ('http://' + data.serverIP + ':' + (data.serverPort || 3000));
+        ip.textContent = data.joinURL;
         ipHint.appendChild(ip);
 
-        if (data.joinHost) {
+        if (data.joinAltURL) {
           var alt = document.createElement('div');
           alt.className = 'alt';
-          alt.innerHTML = 'Some phones can also use <b>http://' +
-            data.joinHost + ':' + (data.serverPort || 3000) + '</b>';
+          alt.appendChild(document.createTextNode('Some phones can also use '));
+          var altB = document.createElement('b');
+          altB.textContent = data.joinAltURL;
+          alt.appendChild(altB);
           ipHint.appendChild(alt);
         }
 
         // One-tap invite: copy the join link to share it any way (chat, etc.).
-        var joinURL = data.joinURL || ('http://' + data.serverIP + ':' + (data.serverPort || 3000));
+        var joinURL = data.joinURL;
         var invite = document.createElement('button');
         invite.id = 'btn-invite';
         invite.type = 'button';
@@ -1705,24 +1713,162 @@
 
     // ---------- Socket events ----------
 
+    // A fresh page per game used to reset every render cache. Tables keep the
+    // page alive across games, so the caches reset when a game goes away.
+    function resetGameView() {
+      teardownStage();
+      stageKey = '';
+      prevTrick = [];
+      prevTricksPlayed = 0;
+      prevRoundNum = 0;
+      prevMyHandLen = -1;
+      prevTokCounts = [-1, -1];
+      prevTrumpVal = null;
+      prevKapTeam = -1;
+      prevOver = false;
+      resultsChosen = false;
+      myState = null;
+      $('overlay').style.display = 'none';
+      $('vote-banner').style.display = 'none';
+      $('reconnect-banner').style.display = 'none';
+    }
+
+    function clearSession() {
+      try { sessionStorage.removeItem('omi-token'); } catch (e) {}
+      sessionToken = null;
+      socket.auth = { v: PROTOCOL };
+    }
+
+    // Leave whatever table view is showing and go to the tables screen.
+    function enterTables() {
+      if (currentScreen === 'game' || currentScreen === 'lobby') resetGameView();
+      atTable = false;
+      showScreen('tables');
+      $('tables-name').textContent = myName;
+      $('tables-error').textContent = '';
+      renderTables(lastTables);
+      socket.emit('browse');
+      if (wantedTable) {
+        var id = wantedTable;
+        wantedTable = 0;
+        joinTable(id);
+      }
+    }
+
+    function joinTable(id) {
+      $('tables-error').textContent = '';
+      socket.emit('join-table', { tableId: id, name: myName });
+    }
+
+    var TABLE_STATUS = { empty: 'OPEN', open: 'OPEN', full: 'FULL', playing: 'IN PLAY', finished: 'FINISHING' };
+    var MODE_NAMES = { 2: '2 players · Duel', 3: '3 players · Free-for-All', 4: '4 players · Teams' };
+
+    function renderTables(list) {
+      var wrap = $('tables-list');
+      wrap.innerHTML = '';
+      (list || []).forEach(function (t) {
+        var card = document.createElement('div');
+        card.className = 'tbl-card st-' + t.status;
+        card.setAttribute('role', 'listitem');
+
+        var head = document.createElement('div');
+        head.className = 'tbl-head';
+        var name = document.createElement('span');
+        name.className = 'tbl-name';
+        name.textContent = t.label;
+        var badge = document.createElement('span');
+        badge.className = 'tbl-badge';
+        badge.textContent = TABLE_STATUS[t.status] || t.status;
+        head.appendChild(name);
+        head.appendChild(badge);
+        card.appendChild(head);
+
+        var meta = document.createElement('div');
+        meta.className = 'tbl-meta';
+        meta.textContent = t.humans + '/' + t.seats + ' seated · ' + (MODE_NAMES[t.mode] || '');
+        card.appendChild(meta);
+
+        var who = document.createElement('div');
+        who.className = 'tbl-names';
+        who.textContent = t.names && t.names.length ? t.names.join(', ') : 'Nobody here yet';
+        card.appendChild(who);
+
+        if (t.status === 'playing' || t.status === 'finished') {
+          var sc = document.createElement('div');
+          sc.className = 'tbl-score';
+          var score = t.score || [];
+          sc.textContent = 'Round ' + t.round + ' · ' +
+            (t.mode === 4 ? 'Team A ' + score[0] + ' : ' + score[1] + ' Team B' : score.join(' · '));
+          card.appendChild(sc);
+        }
+
+        var btn = document.createElement('button');
+        btn.className = 'tbl-join';
+        btn.textContent = t.canJoin ? 'JOIN' : (t.status === 'full' ? 'FULL' : 'LOCKED');
+        btn.disabled = !t.canJoin;
+        btn.setAttribute('aria-label', t.canJoin ? 'Join ' + t.label : t.label + ' is ' + badge.textContent.toLowerCase());
+        btn.addEventListener('click', function () { joinTable(t.id); });
+        card.appendChild(btn);
+
+        wrap.appendChild(card);
+      });
+    }
+
     socket.on('server-error', function (data) {
-      if ($('screen-join').style.display !== 'none') {
+      if (currentScreen === 'join') {
         $('join-error').textContent = data.message;
+      } else if (currentScreen === 'tables') {
+        $('tables-error').textContent = data.message;
       } else {
         showToast(data.message, 3000);
       }
     });
 
+    socket.on('version-mismatch', function () {
+      // One reload fetches the current client; never loop on it.
+      var flag = null;
+      try { flag = sessionStorage.getItem('omi-reloaded'); } catch (e) {}
+      if (flag) return;
+      try { sessionStorage.setItem('omi-reloaded', '1'); } catch (e) {}
+      window.location.reload();
+    });
+
+    socket.on('tables', function (list) {
+      lastTables = list || [];
+      if (currentScreen === 'tables') renderTables(lastTables);
+    });
+
+    socket.on('join-error', function (data) {
+      if (currentScreen === 'tables') $('tables-error').textContent = data.message;
+      else showToast(data.message, 3000);
+    });
+
+    socket.on('table-joined', function () {
+      atTable = true;
+      try { sessionStorage.removeItem('omi-reloaded'); } catch (e) {}
+    });
+
+    // The server released our seat (we left, the lobby closed, or we were
+    // removed for being idle). Back to the tables screen.
+    socket.on('table-left', function (data) {
+      clearSession();
+      $('dc-overlay').style.display = 'none';
+      enterTables();
+      if (data && data.notice) showToast(data.notice, 5000);
+    });
+
     socket.on('lobby-update', function (data) {
       isHost = !!data.isHost;
-      if (!hasJoined) return;
-      // A lobby-update during a game means the game was torn down server-side
+      atTable = true;
+      // A lobby-update while a game is on screen means that game ended.
+      if (currentScreen === 'game') resetGameView();
       showScreen('lobby');
       $('overlay').style.display = 'none';
       renderLobby(data);
     });
 
     socket.on('state-update', function (state) {
+      atTable = true;
       myState = state;
       mySeat = state.mySeat;
       showScreen('game');
@@ -1749,6 +1895,10 @@
       showToast(data.message, 2500);
     });
 
+    socket.on('table-notice', function (data) {
+      if (data && data.message) showToast(data.message, 5000);
+    });
+
     socket.on('shuffle-move', function (d) {
       if (washRelay && d && typeof d.x === 'number' && typeof d.y === 'number') {
         washRelay(d.x, d.y);
@@ -1763,15 +1913,21 @@
       if (chopRelay) chopRelay();
     });
 
-    socket.on('player-disconnected', function (data) {
-      // Only relevant if we were actually in the game
-      if ($('screen-game').style.display === 'none') return;
+    // Someone left mid-game for good: the match ended and this table is back
+    // in its lobby (the lobby-update follows right after this).
+    socket.on('game-abandoned', function (data) {
+      var name = (data && data.name) || 'A player';
+      var why = {
+        idle: name + ' was idle for too long.',
+        disconnect: name + ' lost connection and did not come back.',
+        left: name + ' left the table.',
+      }[data && data.reason] || name + ' left.';
+      $('dc-msg').textContent = why + ' The game has ended.';
       $('dc-overlay').style.display = 'flex';
-      $('dc-msg').textContent = data.name + ' disconnected. The game has ended.';
     });
 
     socket.on('disconnect', function () {
-      if ($('screen-game').style.display !== 'none') {
+      if (currentScreen === 'game') {
         showToast('Connection lost, trying to reconnect…', 6000);
       }
     });
@@ -1782,26 +1938,23 @@
     socket.on('session', function (data) {
       if (!data || !data.token) return;
       sessionToken = data.token;
-      socket.auth = { token: data.token };
+      socket.auth = { token: data.token, v: PROTOCOL };
       try { sessionStorage.setItem('omi-token', data.token); } catch (e) {}
     });
 
-    // Our token no longer matches an active seat (game ended while we were
-    // away, or we refreshed in the lobby): drop it and return to the start.
+    // Our token no longer matches a seat (the game ended while we were away,
+    // or we refreshed in a lobby): drop it and go back to the tables.
     socket.on('session-invalid', function () {
-      try { sessionStorage.removeItem('omi-token'); } catch (e) {}
-      sessionToken = null;
-      socket.auth = {};
-      if (hasJoined) window.location.reload();
-    });
-
-    socket.on('connect', function () {
-      // With reconnect support the server restores our seat and pushes fresh
-      // state, so there is nothing to do here. A stale session triggers
-      // 'session-invalid' above instead of a blind reload.
+      clearSession();
+      if (atTable || currentScreen === 'lobby' || currentScreen === 'game') {
+        if (myName) enterTables();
+        else showScreen('join');
+      }
     });
 
     // ---------- UI wiring ----------
+
+    $('input-name').value = myName;
 
     $('btn-join').addEventListener('click', function () {
       var name = $('input-name').value.trim();
@@ -1810,12 +1963,18 @@
         return;
       }
       $('join-error').textContent = '';
-      hasJoined = true;
-      socket.emit('join', { name: name });
+      myName = name.slice(0, 14);
+      try { localStorage.setItem('omi-name', myName); } catch (e) {}
+      enterTables();
     });
 
     $('input-name').addEventListener('keydown', function (e) {
       if (e.key === 'Enter') $('btn-join').click();
+    });
+
+    $('btn-change-name').addEventListener('click', function () {
+      showScreen('join');
+      $('input-name').focus();
     });
 
     document.querySelectorAll('.mbtn').forEach(function (b) {
@@ -1832,9 +1991,24 @@
       socket.emit('set-teams', { pairing: (lobbyPairing + 1) % 3 });
     });
 
+    $('btn-leave-table').addEventListener('click', function () {
+      socket.emit('leave-table');
+    });
+
+    // The lobby is already underneath; just dismiss the notice.
     $('btn-back-lobby').addEventListener('click', function () {
-      socket.disconnect();
-      window.location.reload();
+      $('dc-overlay').style.display = 'none';
+    });
+
+    $('btn-stay').addEventListener('click', function () {
+      resultsChosen = true;
+      $('btn-stay').disabled = true;
+      $('ov-waiting').textContent = 'Waiting for the others…';
+      socket.emit('results-choice', { choice: 'stay' });
+    });
+
+    $('btn-leave-results').addEventListener('click', function () {
+      socket.emit('results-choice', { choice: 'leave' });
     });
 
     $('btn-vote-end').addEventListener('click', function () {
@@ -1842,15 +2016,19 @@
     });
 
     function goHome() {
-      try { socket.disconnect(); } catch (e) {}
-      window.location.href = 'https://nodenull.org/';
+      // Free the seat right away instead of making the table wait out the
+      // reconnect window, then navigate.
+      if (atTable) socket.emit('leave-table');
+      setTimeout(function () {
+        try { socket.disconnect(); } catch (e) {}
+        window.location.href = 'https://nodenull.org/';
+      }, atTable ? 150 : 0);
     }
 
     $('btn-home').addEventListener('click', function () {
-      // Only the join screen has nothing to lose; the lobby and an active
-      // game both warrant a confirmation before leaving everyone else behind.
-      var inLobbyOrGame = $('screen-join').style.display === 'none';
-      if (inLobbyOrGame) {
+      // Only the join and tables screens have nothing to lose; a lobby or a
+      // game warrants a confirmation before leaving everyone else behind.
+      if (atTable) {
         $('home-confirm-overlay').style.display = 'flex';
       } else {
         goHome();
@@ -1937,6 +2115,8 @@
     }
 
     $('btn-leaderboard').addEventListener('click', openLeaderboard);
+    $('btn-leaderboard-2').addEventListener('click', openLeaderboard);
+    $('ov-leaderboard').addEventListener('click', openLeaderboard);
     $('lb-close').addEventListener('click', function () {
       $('leaderboard-overlay').style.display = 'none';
     });

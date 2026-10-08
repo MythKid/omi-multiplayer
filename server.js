@@ -149,13 +149,13 @@ server.on('error', (err) => {
 
 function printStartupBanner() {
   if (config.isProduction) {
-    logger.info(`OMI server listening on port ${config.port} (${config.nodeEnv})`);
+    logger.info(`OMI server listening on port ${config.port} (${config.nodeEnv}, ${config.maxSlots} tables)`);
     return;
   }
   // Development / LAN: friendly banner with a scannable QR code.
   const chalk = require('chalk');
   const url = network.getJoinURL();
-  logger.print(chalk.green.bold('\n  OMI server is running.\n'));
+  logger.print(chalk.green.bold('\n  OMI server is running with ' + config.maxSlots + ' tables.\n'));
   logger.print(chalk.white('  On this computer:  ') + chalk.cyan(`http://localhost:${config.port}`));
   logger.print(chalk.white('  On the network:    ') + chalk.cyan.bold(url));
   const host = network.getJoinHost();
@@ -172,14 +172,21 @@ async function start() {
   // Work out the reachable LAN address before advertising it (skipped when a
   // public URL is configured), then build the join QR, then listen.
   if (!config.publicUrl) await network.resolveLocalIP();
-  try {
-    const qr = await QRCode.toDataURL(network.getJoinURL(), {
-      margin: 1, width: 320, errorCorrectionLevel: 'M',
-      color: { dark: '#0d2b18ff', light: '#f4ecd0ff' },
-    });
-    gameManager.setJoinQR(qr);
-  } catch (e) {
-    logger.warn('Could not build the join QR code:', e.message);
+  // One join QR per table, so scanning a lobby's code lands at that table.
+  for (const id of gameManager.tableIds()) {
+    try {
+      const qr = await QRCode.toDataURL(`${network.getJoinURL()}/?table=${id}`, {
+        margin: 1, width: 320, errorCorrectionLevel: 'M',
+        color: { dark: '#0d2b18ff', light: '#f4ecd0ff' },
+      });
+      gameManager.setTableQR(id, qr);
+    } catch (e) {
+      logger.warn(`Could not build the join QR code for table ${id}:`, e.message);
+    }
+  }
+  if (config.maxSocketsExplicit && config.maxSockets < config.maxSlots * 4 + 4) {
+    logger.warn(`MAX_SOCKETS=${config.maxSockets} is too low for ${config.maxSlots} tables; ` +
+      `use at least ${config.maxSlots * 4 + 4} (or leave it unset).`);
   }
 
   server.listen(config.port, config.bindAddress, printStartupBanner);

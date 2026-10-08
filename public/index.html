@@ -37,17 +37,29 @@
     <div class="logo-sub">The Sri Lankan Card Game</div>
     <div class="deco"></div>
     <div class="lbl">YOUR NAME</div>
-    <input id="input-name" type="text" maxlength="14" placeholder="Enter your name…" value="Player">
-    <button id="btn-join">JOIN GAME</button>
+    <input id="input-name" type="text" maxlength="14" placeholder="Enter your name…" autocomplete="nickname">
+    <button id="btn-join">CONTINUE</button>
     <button id="btn-leaderboard" class="btn-secondary">🏆 LEADERBOARD</button>
     <div id="join-error" class="error-msg"></div>
   </div>
 
-  <!-- SCREEN 2: LOBBY -->
+  <!-- SCREEN 2: TABLES -->
+  <div id="screen-tables" style="display:none">
+    <div class="logo logo-sm">OMI</div>
+    <div class="deco"></div>
+    <div class="lbl">CHOOSE A TABLE</div>
+    <div class="tables-me">Playing as <b id="tables-name"></b> · <button id="btn-change-name" class="link-btn">change</button></div>
+    <div id="tables-list" role="list"></div>
+    <div id="tables-error" class="error-msg" role="alert"></div>
+    <div class="tables-hint">A table locks once its game starts. Pick an open one, or wait for a table to finish.</div>
+    <button id="btn-leaderboard-2" class="btn-secondary">🏆 LEADERBOARD</button>
+  </div>
+
+  <!-- SCREEN 3: LOBBY -->
   <div id="screen-lobby" style="display:none">
     <div class="logo">OMI</div>
     <div class="deco"></div>
-    <div class="lbl">WAITING ROOM</div>
+    <div class="lbl" id="lobby-title">WAITING ROOM</div>
     <div id="lobby-players"></div>
     <div id="lobby-teams" style="display:none">
       <div class="lbl" style="margin-bottom:8px">TEAMS</div>
@@ -68,9 +80,10 @@
       <p>Waiting for host to start the game…</p>
     </div>
     <div id="lobby-ip-hint" style="display:none"></div>
+    <button id="btn-leave-table" class="btn-secondary">LEAVE TABLE</button>
   </div>
 
-  <!-- SCREEN 3: GAME -->
+  <!-- SCREEN 4: GAME -->
   <div id="screen-game" style="display:none">
     <div id="table">
       <div id="pS"  class="pzone"></div>
@@ -126,6 +139,11 @@
       </table>
       <div id="ov-note" class="ov-note"></div>
       <button id="btn-ready" class="ov-btn-pri">READY FOR NEXT ROUND</button>
+      <div id="ov-actions" class="ov-actions" style="display:none">
+        <button id="btn-stay" class="ov-btn-pri">BACK TO TABLE</button>
+        <button id="btn-leave-results" class="btn-secondary">LEAVE TABLE</button>
+        <button id="ov-leaderboard" class="btn-secondary">🏆 VIEW LEADERBOARD</button>
+      </div>
       <div id="ov-waiting" class="ov-wait"></div>
     </div>
   </div>
@@ -226,12 +244,12 @@
     </div>
   </div>
 
-  <!-- OVERLAY: Disconnection -->
-  <div id="dc-overlay" style="display:none">
+  <!-- OVERLAY: Game ended because a player left -->
+  <div id="dc-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="dc-title">
     <div class="ov-box">
-      <div class="ov-title">⚠ Player Disconnected</div>
+      <div class="ov-title" id="dc-title">⚠ Game Ended</div>
       <div id="dc-msg" class="ov-note"></div>
-      <button id="btn-back-lobby">BACK TO LOBBY</button>
+      <button id="btn-back-lobby">BACK TO TABLE</button>
     </div>
   </div>
 

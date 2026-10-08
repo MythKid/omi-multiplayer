@@ -28,7 +28,7 @@ const REQUIRED = [
   'README.md', 'LICENSE', '.gitignore', '.env.example',
   'config/index.js', 'utils/logger.js', 'utils/network.js', 'utils/sanitize.js',
   'database/index.js', 'database/sqliteStore.js', 'database/jsonStore.js',
-  'services/gameManager.js', 'services/leaderboardService.js', 'routes/api.js',
+  'services/gameManager.js', 'services/table.js', 'services/leaderboardService.js', 'routes/api.js',
   'public/index.html', 'public/socket.io.min.js',
   'public/css/styles.css', 'public/js/app.js',
   'public/manifest.webmanifest', 'public/sw.js', 'public/favicon.ico',
@@ -105,7 +105,7 @@ console.log('\n[4] Source integrity');
   'server.js', 'game.js', 'test.js', 'test-dist.js', 'test-leaderboard.js', 'test-sockets.js',
   'config/index.js', 'utils/logger.js', 'utils/network.js', 'utils/sanitize.js',
   'database/index.js', 'database/jsonStore.js', 'database/sqliteStore.js',
-  'services/gameManager.js', 'services/leaderboardService.js', 'routes/api.js',
+  'services/gameManager.js', 'services/table.js', 'services/leaderboardService.js', 'routes/api.js',
 ].forEach(f => {
   const r = spawnSync(process.execPath, ['--check', path.join(ROOT, f)], { encoding: 'utf8' });
   ok(r.status === 0, 'parses without syntax errors: ' + f);
@@ -124,7 +124,8 @@ ok(!/require\(['"](fs|net|http|express|socket\.io|dgram)['"]\)/.test(gameSrc),
 const SHIPPED = [
   'server.js', 'game.js', 'test.js', 'public/index.html', 'public/js/app.js',
   'public/css/styles.css', 'README.md', 'package.json',
-  'services/gameManager.js', 'services/leaderboardService.js',
+  'services/gameManager.js', 'services/table.js', 'services/leaderboardService.js',
+  'public/sw.js', 'routes/api.js', 'config/index.js',
 ];
 SHIPPED.forEach(f => ok(!/[—–]/.test(read(f)), 'no em/en dashes in ' + f));
 SHIPPED.forEach(f => ok(!/\b(anthropic|claude)\b/i.test(read(f)), 'no AI-tool signatures in ' + f));
@@ -224,16 +225,25 @@ async function runSmoke() {
   const notFound = await request('/nope.png');
   ok(notFound.status === 404 && /404/.test(notFound.body), 'missing asset returns the themed 404 page');
 
-  // Real client can connect, join, and reach the lobby.
+  const tablesRes = await request('/api/tables');
+  let tablesOk = false;
+  try {
+    const t = JSON.parse(tablesRes.body).tables;
+    tablesOk = tablesRes.status === 200 && Array.isArray(t) && t.length > 0 && t[0].status === 'empty';
+  } catch (e) {}
+  ok(tablesOk, 'GET /api/tables lists the tables');
+
+  // Real client can connect, sit at a table, and reach its lobby.
   const { io } = require('socket.io-client');
-  const client = io('http://127.0.0.1:' + TEST_PORT, { transports: ['websocket'], reconnection: false });
+  const client = io('http://127.0.0.1:' + TEST_PORT,
+    { transports: ['websocket'], reconnection: false, auth: { v: 2 } });
   const joined = await new Promise((resolve) => {
     const t = setTimeout(() => resolve(false), 5000);
-    client.on('lobby-update', (d) => { clearTimeout(t); resolve(!!d); });
-    client.on('connect', () => client.emit('join', { name: 'Tester' }));
+    client.on('lobby-update', (d) => { clearTimeout(t); resolve(!!d && d.tableId === 1); });
+    client.on('connect', () => client.emit('join-table', { tableId: 1, name: 'Tester' }));
     client.on('connect_error', () => { clearTimeout(t); resolve(false); });
   });
-  ok(joined, 'a socket.io client connects and joins the lobby');
+  ok(joined, 'a socket.io client connects and sits at a table');
 
   // Malformed input must not crash the server.
   client.emit('set-mode', { mode: 'not-a-number' });

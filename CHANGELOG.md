@@ -25,6 +25,7 @@ protocol or stored data, a minor version adds features, a patch fixes bugs.
   cached, and a tab left open across an update reloads itself onto the new version.
   Nobody needs to clear their cache or use a private window.
 
+
 ### Small touches
 
 - The version number now sits quietly in the top corner of the menu screens.

@@ -24,7 +24,7 @@ protocol or stored data, a minor version adds features, a patch fixes bugs.
   and stylesheet now loads from a URL tied to its contents, the page itself is never
   cached, and a tab left open across an update reloads itself onto the new version.
   Nobody needs to clear their cache or use a private window.
-- Table chat has a new quick message: 🐽.
+
 
 ### Small touches
 

@@ -26,7 +26,7 @@ const REQUIRED = [
   'package.json', 'package-lock.json', 'server.js', 'game.js', 'test.js',
   'test-dist.js', 'test-leaderboard.js', 'test-rating.js', 'test-sockets.js',
   'README.md', 'CHANGELOG.md', 'LICENSE', '.gitignore', '.env.example',
-  'config/index.js', 'utils/logger.js', 'utils/network.js', 'utils/sanitize.js',
+  'config/index.js', 'utils/logger.js', 'utils/network.js', 'utils/sanitize.js', 'utils/qr.js',
   'database/index.js', 'database/sqliteStore.js', 'database/jsonStore.js',
   'services/gameManager.js', 'services/table.js', 'services/chat.js',
   'services/leaderboardService.js', 'services/rating.js', 'services/identity.js', 'routes/api.js',
@@ -146,7 +146,7 @@ console.log('\n[4] Source integrity');
 // ---------------------------------------------------------------------------
 [
   'server.js', 'game.js', 'test.js', 'test-dist.js', 'test-leaderboard.js', 'test-rating.js',
-  'test-sockets.js', 'config/index.js', 'utils/logger.js', 'utils/network.js', 'utils/sanitize.js',
+  'test-sockets.js', 'config/index.js', 'utils/logger.js', 'utils/network.js', 'utils/sanitize.js', 'utils/qr.js',
   'database/index.js', 'database/jsonStore.js', 'database/sqliteStore.js',
   'services/gameManager.js', 'services/table.js', 'services/chat.js',
   'services/leaderboardService.js', 'services/rating.js', 'services/identity.js', 'routes/api.js',

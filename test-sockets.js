@@ -36,11 +36,13 @@ async function sit(tableId, name) {
   const sock = connect();
   await waitEvent(sock, 'connect');
   const sessionP = waitEvent(sock, 'session');
+  const historyP = waitEvent(sock, 'chat-history');
   const lobbyP = waitEvent(sock, 'lobby-update');
   sock.emit('join-table', { tableId, name });
   const session = await sessionP;
+  const history = await historyP;
   const lobby = await lobbyP;
-  return { sock, token: session && session.token, lobby };
+  return { sock, token: session && session.token, lobby, history };
 }
 
 let server;
@@ -121,6 +123,30 @@ async function run() {
   const p1 = await sit(1, 'Guest1');
   const h2 = await sit(2, 'Host2');
   ok(h1.token && h2.token, 'each player gets a session token');
+
+  // --- chat: scoped to the table, cleaned, capped, rate limited ---
+  const heardAt1 = waitFor(p1.sock, 'chat-message', m => m.kind === 'user', 1500);
+  const leakTo2 = waitFor(h2.sock, 'chat-message', m => m.kind === 'user', 1500);
+  h1.sock.emit('chat-send', { text: '  Hello\u202e   table\none ' + 'x'.repeat(300) });
+  const msg = await heardAt1;
+  ok(msg && msg.name === 'Host1' && msg.text.indexOf('Hello table one x') === 0,
+    'chat reaches the table with whitespace collapsed and bidi characters stripped');
+  ok(msg && Array.from(msg.text).length === 200, 'chat messages are capped at 200 characters');
+  ok(!(await leakTo2), 'chat never reaches another table');
+  const viewerChat = waitFor(p1.sock, 'chat-message', m => m.text === 'from nowhere', 800);
+  viewer.emit('chat-send', { text: 'from nowhere' });
+  ok(!(await viewerChat), 'a socket not seated at the table cannot chat there');
+  const flood = waitEvent(h1.sock, 'chat-error', 2000);
+  for (let i = 0; i < 6; i++) h1.sock.emit('chat-send', { text: 'spam ' + i });
+  ok(!!(await flood), 'chat flooding is rate limited');
+  const third = await sit(1, 'Third');
+  ok(Array.isArray(third.history) && third.history.some(m => m.kind === 'user' && m.name === 'Host1'),
+    'a newcomer receives the table chat history');
+  ok(third.history.some(m => m.kind === 'system' && /sat down/.test(m.text)), 'joins are announced in chat');
+  const thirdLeft = waitEvent(third.sock, 'table-left');
+  third.sock.emit('leave-table');
+  await thirdLeft;
+  third.sock.close();
 
   h1.sock.emit('set-mode', { mode: 4 });
   await wait(150);

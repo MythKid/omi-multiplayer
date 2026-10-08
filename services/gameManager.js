@@ -116,6 +116,8 @@ function handleJoinTable(socket, payload) {
   // seat (see handleConnection).
   socket.emit('session', { token: res.player.token });
   socket.emit('table-joined', { tableId: table.id, label: table.label, name: cleanName });
+  table.sendChatHistory(socket);
+  table.postSystem(`${cleanName} sat down`);
   table.broadcastLobbyUpdate();
   table.notifyChanged();
 }
@@ -188,6 +190,7 @@ function wireHandlers(socket) {
   route('play-card', 1, (t, p) => t.onPlayCard(socket, p.cardIndex));
   route('ready-next-round', 1, (t) => t.onReadyNextRound(socket));
   route('results-choice', 1, (t, p) => t.chooseResult(socket, String(p.choice || '')));
+  route('chat-send', 1, (t, p) => t.onChat(socket, p.text));
 
   socket.on('disconnect', safe(() => {
     const table = socket.data.table;

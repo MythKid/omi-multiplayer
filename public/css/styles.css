@@ -49,7 +49,7 @@
     #btn-info, #btn-home, .tok.pop { animation: none !important; }
     .conf { display: none !important; }
     .splash-item { animation-duration: .35s !important; }
-    .lb-row { animation: none !important; }
+    .lb-row, .chat-bubble { animation: none !important; }
   }
 
   /* ---------- Join & Lobby screens ---------- */
@@ -1165,6 +1165,156 @@
   }
   #btn-home:hover { transform: scale(1.12); box-shadow: 0 0 16px rgba(232,197,71,.5); }
 
+  /* ---------- Table chat ---------- */
+  #btn-chat {
+    position: fixed;
+    left: max(14px, env(safe-area-inset-left));
+    bottom: calc(max(14px, env(safe-area-inset-bottom)) + 50px);
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    border: 1px solid #c9a227;
+    background: rgba(0,0,0,.55);
+    color: #e8c547;
+    font-size: 17px;
+    z-index: 110;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 14px rgba(0,0,0,.5);
+    transition: transform .15s, box-shadow .15s;
+  }
+  #btn-chat:hover, #btn-chat.on { transform: scale(1.08); box-shadow: 0 0 16px rgba(232,197,71,.5); }
+  .chat-unread {
+    position: absolute;
+    top: -5px; right: -5px;
+    min-width: 19px; height: 19px;
+    padding: 0 5px;
+    border-radius: 10px;
+    background: #d63031;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 6px rgba(0,0,0,.5);
+  }
+
+  /* Non-modal: no backdrop, the table stays fully playable around it */
+  #chat-panel {
+    position: fixed;
+    left: max(14px, env(safe-area-inset-left));
+    bottom: calc(max(14px, env(safe-area-inset-bottom)) + 100px);
+    width: 320px;
+    max-width: calc(100vw - 28px);
+    /* Tall enough to read, short enough to stay below the west seat, which
+       sits at mid-height on the left edge. */
+    height: clamp(200px, calc(50vh - 190px), 380px);
+    flex-direction: column;
+    background: rgba(8, 26, 15, .93);
+    border: 1px solid #c9a227;
+    border-radius: 12px;
+    box-shadow: 0 10px 34px rgba(0,0,0,.6);
+    z-index: 110;
+    overflow: hidden;
+    -webkit-user-select: text;
+    user-select: text;
+  }
+  .chat-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 10px 7px 14px;
+    border-bottom: 1px solid rgba(201,162,39,.3);
+  }
+  .chat-title { flex: 1; font-family: 'Cinzel', serif; font-size: 12px; letter-spacing: 3px; color: #e8c547; }
+  .chat-icon { background: none; border: none; color: #c9a227; font-size: 18px; line-height: 1; padding: 2px 4px; }
+  .chat-icon:hover { color: #e8c547; }
+  #chat-log {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    font-size: 14px;
+    line-height: 1.35;
+    overscroll-behavior: contain;
+  }
+  .chat-msg { overflow-wrap: anywhere; }
+  .chat-msg.sys { font-size: 12px; font-style: italic; color: #9a8770; text-align: center; }
+  .chat-who {
+    background: none;
+    border: none;
+    padding: 0;
+    margin-right: 6px;
+    font-family: 'Cinzel', serif;
+    font-weight: 700;
+    font-size: 12px;
+    color: #e8c547;
+  }
+  .chat-who.team-a { color: #74b9ff; }
+  .chat-who.team-b { color: #ff9f80; }
+  .chat-msg.mine .chat-who { color: #7ee08a; cursor: default; }
+  .chat-hidden { display: none; font-style: italic; color: #7d715c; font-size: 12px; }
+  .chat-msg.muted .chat-text { display: none; }
+  .chat-msg.muted .chat-hidden { display: inline; }
+  #chat-quick { display: flex; flex-wrap: wrap; gap: 5px; padding: 6px 10px 0; }
+  .chat-chip {
+    font-size: 12px;
+    color: #f0e8cc;
+    background: rgba(232,197,71,.1);
+    border: 1px solid rgba(201,162,39,.4);
+    border-radius: 12px;
+    padding: 3px 9px;
+  }
+  .chat-chip:hover { background: rgba(232,197,71,.24); }
+  #chat-form { display: flex; gap: 6px; padding: 8px 10px; }
+  #chat-input {
+    flex: 1;
+    min-width: 0;
+    background: rgba(0,0,0,.35);
+    border: 1px solid rgba(201,162,39,.5);
+    border-radius: 8px;
+    color: #f0e8cc;
+    font-family: 'Lora', serif;
+    font-size: 16px; /* 16px stops iOS zooming into the field */
+    padding: 7px 10px;
+    outline: none;
+  }
+  #chat-input:focus { border-color: #e8c547; }
+  #chat-send {
+    font-family: 'Cinzel', serif;
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: 1px;
+    color: #1a1a2e;
+    background: linear-gradient(180deg, #e8c547, #c9a227);
+    border: none;
+    border-radius: 8px;
+    padding: 0 12px;
+  }
+  .chat-foot { font-size: 10px; color: #7d715c; padding: 0 12px 8px; font-style: italic; }
+
+  /* Speech bubble by the speaker's seat */
+  .chat-bubble {
+    position: absolute;
+    z-index: 58;
+    max-width: 220px;
+    padding: 6px 11px;
+    border-radius: 12px;
+    background: #f4ecd0;
+    color: #1a1a2e;
+    font-size: 13px;
+    line-height: 1.3;
+    box-shadow: 0 4px 14px rgba(0,0,0,.55);
+    pointer-events: none;
+    overflow-wrap: anywhere;
+    animation: bubbleIn .22s cubic-bezier(.3,1.4,.5,1) both;
+    transition: opacity .3s;
+  }
+  .chat-bubble.out { opacity: 0; }
+  @keyframes bubbleIn { from { transform: scale(.6); opacity: 0; } }
+
   /* ---------- Info / How-to-play ---------- */
   #btn-info {
     position: fixed;
@@ -1234,6 +1384,19 @@
 
   /* ---------- Compact screens (phones / short landscape) ---------- */
   @media (max-width: 760px), (max-height: 560px) {
+    #btn-chat { width: 34px; height: 34px; font-size: 14px; bottom: calc(max(14px, env(safe-area-inset-bottom)) + 42px); }
+    /* The chat drops from the top as a sheet: it covers only the score and
+       info panels, so the hand and the action panel stay playable, and it
+       stays in view when the on-screen keyboard opens. */
+    #chat-panel {
+      left: 0; right: 0; top: 0; bottom: auto;
+      width: 100%; max-width: none;
+      height: 42vh;
+      border-radius: 0 0 14px 14px;
+      border-top: none;
+      padding-top: env(safe-area-inset-top);
+    }
+    .chat-foot { display: none; }
     #scores { padding: 6px 8px; min-width: 100px; max-width: 126px; max-height: 52vh; overflow-y: auto; }
     #btn-info { width: 34px; height: 34px; font-size: 16px; }
     #btn-home { width: 34px; height: 34px; font-size: 14px; }

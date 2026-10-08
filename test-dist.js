@@ -28,8 +28,9 @@ const REQUIRED = [
   'README.md', 'LICENSE', '.gitignore', '.env.example',
   'config/index.js', 'utils/logger.js', 'utils/network.js', 'utils/sanitize.js',
   'database/index.js', 'database/sqliteStore.js', 'database/jsonStore.js',
-  'services/gameManager.js', 'services/table.js', 'services/leaderboardService.js', 'routes/api.js',
-  'public/index.html', 'public/socket.io.min.js',
+  'services/gameManager.js', 'services/table.js', 'services/chat.js',
+  'services/leaderboardService.js', 'routes/api.js',
+  'public/index.html', 'public/js/chat.js', 'public/socket.io.min.js',
   'public/css/styles.css', 'public/js/app.js',
   'public/manifest.webmanifest', 'public/sw.js', 'public/favicon.ico',
   'public/icons/icon.svg', 'public/icons/icon-maskable.svg', 'public/icons/favicon.svg',
@@ -105,15 +106,18 @@ console.log('\n[4] Source integrity');
   'server.js', 'game.js', 'test.js', 'test-dist.js', 'test-leaderboard.js', 'test-sockets.js',
   'config/index.js', 'utils/logger.js', 'utils/network.js', 'utils/sanitize.js',
   'database/index.js', 'database/jsonStore.js', 'database/sqliteStore.js',
-  'services/gameManager.js', 'services/table.js', 'services/leaderboardService.js', 'routes/api.js',
+  'services/gameManager.js', 'services/table.js', 'services/chat.js',
+  'services/leaderboardService.js', 'routes/api.js',
 ].forEach(f => {
   const r = spawnSync(process.execPath, ['--check', path.join(ROOT, f)], { encoding: 'utf8' });
   ok(r.status === 0, 'parses without syntax errors: ' + f);
 });
-// The client script lives in its own file now; it must parse too.
-let clientParses = false;
-try { new Function(read('public/js/app.js')); clientParses = true; } catch (e) {}
-ok(clientParses, 'client script (public/js/app.js) parses');
+// The client scripts live in their own files; they must parse too.
+['public/js/app.js', 'public/js/chat.js'].forEach(f => {
+  let parses = false;
+  try { new Function(read(f)); parses = true; } catch (e) {}
+  ok(parses, 'client script (' + f + ') parses');
+});
 
 // game.js must stay pure (no I/O), so it can be reused and unit-tested freely.
 const gameSrc = read('game.js');
@@ -124,8 +128,8 @@ ok(!/require\(['"](fs|net|http|express|socket\.io|dgram)['"]\)/.test(gameSrc),
 const SHIPPED = [
   'server.js', 'game.js', 'test.js', 'public/index.html', 'public/js/app.js',
   'public/css/styles.css', 'README.md', 'package.json',
-  'services/gameManager.js', 'services/table.js', 'services/leaderboardService.js',
-  'public/sw.js', 'routes/api.js', 'config/index.js',
+  'services/gameManager.js', 'services/table.js', 'services/chat.js', 'services/leaderboardService.js',
+  'public/sw.js', 'public/js/chat.js', 'routes/api.js', 'config/index.js',
 ];
 SHIPPED.forEach(f => ok(!/[—–]/.test(read(f)), 'no em/en dashes in ' + f));
 SHIPPED.forEach(f => ok(!/\b(anthropic|claude)\b/i.test(read(f)), 'no AI-tool signatures in ' + f));

@@ -9,6 +9,7 @@ const logger = require('../utils/logger');
 const network = require('../utils/network');
 const { nameKey } = require('../utils/sanitize');
 const leaderboard = require('./leaderboardService');
+const { sanitizeMessage, ChatLog, makeChatLimiter } = require('./chat');
 
 // How long a seat is held for a dropped player to return (refresh, brief
 // network blip) before the game is ended for the table.
@@ -75,6 +76,7 @@ class Table {
     this.lobbyActiveAt = Date.now();
     this.awaiting = { key: '', since: 0, warned: false };
     this.summaryKey = '';
+    this.chat = new ChatLog();
   }
 
   // ---------- Status ----------
@@ -408,6 +410,11 @@ class Table {
       game.dealStage1(gs);
     } else if (phase === 'dealing2') {
       game.dealStage2(gs);
+      if (gs.phase === 'redeal') {
+        const { counts, shortTeam } = gs.redealInfo;
+        this.postSystem(`Redeal: Team ${'AB'[shortTeam]} held only ${counts[shortTeam]} trump(s). ` +
+          `${gs.players[gs.dealer].name} reshuffles.`);
+      }
     } else if (phase === 'redeal') {
       game.redealRound(gs);
     } else if (phase === 'trump') {
@@ -476,6 +483,7 @@ class Table {
     this.hostId = null;
     this.mode = 4;
     this.teamPairing = 0;
+    this.chat.clear(); // a new group starts with a clean slate
     this.touchLobby();
   }
 
@@ -484,6 +492,42 @@ class Table {
     this.clearGrace(player);
     this.players = this.players.filter(p => p !== player);
     this.hooks.detach(player, notice || null);
+    if (this.players.length) this.postSystem(`${player.name} left the table`);
+  }
+
+  // ---------- Chat ----------
+
+  postSystem(text) {
+    this.emitRoom('chat-message', this.chat.add({ kind: 'system', text }));
+  }
+
+  sendChatHistory(socket) {
+    socket.emit('chat-history', this.chat.list());
+  }
+
+  onChat(socket, text) {
+    const player = this.playerBySocket(socket);
+    if (!player) return;
+    const clean = sanitizeMessage(text);
+    if (!clean) return;
+    const verdict = player.chatAllow(clean);
+    if (verdict !== 'ok') {
+      socket.emit('chat-error', {
+        message: verdict === 'repeat' ? 'You just said that.' : 'Slow down a little.',
+      });
+      return;
+    }
+    if (!this.gameState) this.touchLobby();
+    const gs = this.gameState;
+    const inGame = gs && player.seat < gs.mode;
+    this.emitRoom('chat-message', this.chat.add({
+      kind: 'user',
+      seat: player.seat,
+      inGame: !!inGame,
+      team: inGame && gs.mode === 4 ? gs.players[player.seat].team : null,
+      name: player.name,
+      text: clean,
+    }));
   }
 
   // ---------- Membership ----------
@@ -507,6 +551,7 @@ class Table {
       token: crypto.randomUUID(),
       graceTimer: null,
       choice: null,
+      chatAllow: makeChatLimiter(),
     };
     this.players.push(player);
     this.touchLobby();
@@ -614,6 +659,7 @@ class Table {
         RECONNECT_GRACE_MS
       );
       logger.debug(`${this.label}: ${player.name} dropped; holding seat ${player.seat}`);
+      this.postSystem(`${player.name} lost connection`);
       this.broadcastGameState();
       return;
     }
@@ -667,7 +713,9 @@ class Table {
       try { old.disconnect(true); } catch (e) { /* ignore */ }
     }
     socket.emit('session', { token: player.token });
+    this.sendChatHistory(socket);
     logger.info(`${this.label}: ${player.name} reconnected to seat ${player.seat}`);
+    this.postSystem(`${player.name} is back`);
     if (this.gameState) {
       this.gameState.lastEvent = `${player.name} reconnected`;
       this.broadcastGameState();
@@ -720,6 +768,7 @@ class Table {
     this.players.forEach(p => { p.ready = false; p.choice = null; });
 
     logger.info(`${this.label}: game started, ${this.mode} players (${humans.length} human)`);
+    this.postSystem('The game has started. Good luck!');
     this.broadcastGameState();
     this.scheduleFlow();
   }

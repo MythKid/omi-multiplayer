@@ -263,10 +263,28 @@
     </div>
   </div>
 
+  <!-- Table chat: a toggle button and a non-modal panel (public/js/chat.js) -->
+  <button id="btn-chat" type="button" aria-label="Open chat" aria-expanded="false" aria-controls="chat-panel" style="display:none">💬<span id="chat-unread" class="chat-unread" style="display:none"></span></button>
+  <section id="chat-panel" aria-label="Table chat" style="display:none">
+    <div class="chat-head">
+      <span class="chat-title">TABLE CHAT</span>
+      <button id="chat-sound" type="button" class="chat-icon" aria-pressed="true">🔔</button>
+      <button id="chat-close" type="button" class="chat-icon" aria-label="Close chat">×</button>
+    </div>
+    <div id="chat-log" role="log" aria-live="polite" aria-relevant="additions"></div>
+    <div id="chat-quick"></div>
+    <form id="chat-form" autocomplete="off">
+      <input id="chat-input" type="text" maxlength="200" placeholder="Say something to the table…" enterkeyhint="send" aria-label="Chat message">
+      <button id="chat-send" type="submit">SEND</button>
+    </form>
+    <div class="chat-foot">Everyone at this table sees these messages. Tap a name to mute it.</div>
+  </section>
+
   <!-- Banner shown while waiting for a dropped player to reconnect -->
   <div id="reconnect-banner" role="status" aria-live="polite" style="display:none"></div>
 
   <script src="/socket.io.min.js"></script>
+  <script src="/js/chat.js"></script>
   <script src="/js/app.js"></script>
 </body>
 </html>

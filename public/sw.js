@@ -8,6 +8,7 @@ const SHELL = [
   '/index.html',
   '/css/styles.css',
   '/js/app.js',
+  '/js/chat.js',
   '/socket.io.min.js',
   '/manifest.webmanifest',
   '/favicon.ico',

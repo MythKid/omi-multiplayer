@@ -47,6 +47,8 @@
       $('screen-tables').style.display = name === 'tables' ? 'flex' : 'none';
       $('screen-lobby').style.display = name === 'lobby' ? 'flex' : 'none';
       $('screen-game').style.display = name === 'game' ? 'block' : 'none';
+      // Chat belongs to a table: available in its lobby, game and results.
+      if (window.OmiChat) window.OmiChat.setAvailable(name === 'lobby' || name === 'game');
     }
 
     function showToast(msg, ms) {
@@ -786,6 +788,24 @@
         src.start();
       }
 
+      // Soft two-note blip for an incoming chat message
+      function pop() {
+        if (!ensure()) return;
+        [880, 1320].forEach(function (f, i) {
+          var o = ctx.createOscillator();
+          o.type = 'sine';
+          o.frequency.value = f;
+          var g = ctx.createGain();
+          var at = ctx.currentTime + i * 0.07;
+          g.gain.setValueAtTime(0.001, at);
+          g.gain.exponentialRampToValueAtTime(0.12, at + 0.015);
+          g.gain.exponentialRampToValueAtTime(0.001, at + 0.12);
+          o.connect(g); g.connect(ctx.destination);
+          o.start(at);
+          o.stop(at + 0.14);
+        });
+      }
+
       // Bright little arpeggio for the big moments
       function fanfare() {
         if (!ensure()) return;
@@ -809,7 +829,7 @@
 
       return {
         startWash: startWash, setWash: setWash, stopWash: stopWash,
-        snap: snap, thump: thump, riffle: riffle, swish: swish, fanfare: fanfare,
+        snap: snap, thump: thump, riffle: riffle, swish: swish, fanfare: fanfare, pop: pop,
       };
     })();
 
@@ -1815,6 +1835,7 @@
     function enterTables() {
       if (currentScreen === 'game' || currentScreen === 'lobby') resetGameView();
       atTable = false;
+      window.OmiChat.reset();
       showScreen('tables');
       $('tables-name').textContent = myName;
       $('tables-error').textContent = '';
@@ -1915,8 +1936,9 @@
       else showToast(data.message, 3000);
     });
 
-    socket.on('table-joined', function () {
+    socket.on('table-joined', function (data) {
       atTable = true;
+      if (data && data.name) myName = data.name; // the name as the server cleaned it
       try { sessionStorage.removeItem('omi-reloaded'); } catch (e) {}
     });
 
@@ -2124,7 +2146,21 @@
       if (e.key === 'Escape') {
         $('info-overlay').style.display = 'none';
         $('leaderboard-overlay').style.display = 'none';
+        window.OmiChat.close();
       }
+    });
+
+    window.OmiChat.init({
+      socket: socket,
+      myName: function () { return myName; },
+      // The seat's zone on screen, for speech bubbles (game screen only)
+      zoneForSeat: function (seat) {
+        if (currentScreen !== 'game' || !myState) return null;
+        var off = relativeOffset(seat, myState.mySeat, myState.mode);
+        return $(ZONES[myState.mode][off]);
+      },
+      sound: function () { Sound.pop(); },
+      toast: function (msg) { showToast(msg, 2200); },
     });
 
     // ---------- Leaderboard ----------
